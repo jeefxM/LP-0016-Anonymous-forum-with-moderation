@@ -1,15 +1,27 @@
 [package]
 name = "membership_registry_core"
 version = "0.0.1"
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-rust-version.workspace = true
+edition = "2021"
+license = "MIT"
+authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
+rust-version = "1.88"
+# Lower than the workspace's 1.94 because this crate also compiles inside
+# the risc0-guest-builder docker image which ships rustc 1.88-dev.
 description = "Shared types for the membership_registry LEZ program (Instruction enum, state)"
+# `edition`, `license`, etc. inlined (not workspace-inherited) because this
+# crate is also pulled into the docker build context for the RISC0 guest,
+# which does not include the parent workspace's Cargo.toml.
 
 [features]
 default = ["std"]
 std = []
 
 [dependencies]
-serde = { workspace = true }
+# Inlined (not workspace.dependencies) for the same reason as the package
+# metadata above: the guest's docker build context starts at this crate's
+# parent (membership_registry/) and does not include the outer Cargo.toml.
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde-big-array = { version = "0.5", default-features = false }
+
+[dev-dependencies]
+serde_json = "1"
