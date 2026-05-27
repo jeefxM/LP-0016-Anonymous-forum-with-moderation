@@ -1576,9 +1576,11 @@ dependencies = [
 name = "membership_registry_core"
 version = "0.0.1"
 dependencies = [
+ "bincode",
  "serde",
  "serde-big-array",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

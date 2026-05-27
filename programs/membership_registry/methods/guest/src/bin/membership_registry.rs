@@ -17,56 +17,25 @@
 //! ADR-005). `H_leaf(c) = SHA256("commit" || c)`,
 //! `H_node(l, r) = SHA256("node" || l || r)`.
 
+//! Thin wrapper around `membership_registry_core`. All real logic
+//! (Merkle folds, state encoding, register validity checks) lives in the
+//! `core` crate so host tests exercise the exact same code path.
+
 #![no_main]
-
-use bincode::Options;
-use membership_registry_core::{
-    tags, Commitment, ForumConfig, ForumState, Hash, Instruction, MerklePath, TREE_DEPTH,
-};
-use nssa_core::{
-    account::{Account, AccountWithMetadata, Data},
-    program::{read_nssa_inputs, AccountPostState, Claim, PdaSeed, ProgramOutput},
-};
-use risc0_zkvm::sha::{Impl, Sha256};
-
-risc0_zkvm::guest::entry!(main);
-
-fn sha256_concat(parts: &[&[u8]]) -> Hash {
-    let mut buf = alloc::vec::Vec::with_capacity(parts.iter().map(|p| p.len()).sum());
-    for p in parts {
-        buf.extend_from_slice(p);
-    }
-    let digest = Impl::hash_bytes(&buf);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(digest.as_bytes());
-    out
-}
 
 extern crate alloc;
 
-fn leaf_hash(commitment: &Commitment) -> Hash {
-    sha256_concat(&[tags::COMMIT, commitment])
-}
+use bincode::Options;
+use membership_registry_core::{
+    empty_tree_root, simulate_register, Commitment, ForumConfig, ForumState, Instruction,
+    MerklePath,
+};
+use nssa_core::{
+    account::{AccountWithMetadata, Data},
+    program::{read_nssa_inputs, AccountPostState, Claim, PdaSeed, ProgramOutput},
+};
 
-fn node_hash(left: &Hash, right: &Hash) -> Hash {
-    sha256_concat(&[tags::NODE, left, right])
-}
-
-/// Folds a leaf up the tree using `path`. `index` selects sibling
-/// orientation per level (bit 0 = current is left child).
-fn fold_path(leaf: Hash, path: &MerklePath, index: u32) -> Hash {
-    let mut cur = leaf;
-    for level in 0..TREE_DEPTH {
-        let sibling = &path[level];
-        let bit = (index >> level) & 1;
-        cur = if bit == 0 {
-            node_hash(&cur, sibling)
-        } else {
-            node_hash(sibling, &cur)
-        };
-    }
-    cur
-}
+risc0_zkvm::guest::entry!(main);
 
 fn encode_state(state: &ForumState) -> alloc::vec::Vec<u8> {
     bincode::DefaultOptions::new()
@@ -88,11 +57,8 @@ fn handle_initialize(
     seed: [u8; 32],
 ) -> alloc::vec::Vec<AccountPostState> {
     let mut account = pre_state.account.clone();
-
-    // Compute the empty-tree root by folding a zero leaf with zero siblings.
-    let empty_root = fold_path([0u8; 32], &[[0u8; 32]; TREE_DEPTH], 0);
     let state = ForumState {
-        tree_root: empty_root,
+        tree_root: empty_tree_root(),
         next_leaf_index: 0,
         revocation_set: alloc::vec::Vec::new(),
         config,
@@ -113,30 +79,12 @@ fn handle_register(
     leaf_index: u32,
 ) -> alloc::vec::Vec<AccountPostState> {
     let mut account = pre_state.account.clone();
-    let mut state = decode_state(account.data.as_ref());
+    let state = decode_state(account.data.as_ref());
 
-    assert_eq!(
-        leaf_index, state.next_leaf_index,
-        "leaf_index must equal next_leaf_index"
-    );
-    assert!(leaf_index < (1u32 << TREE_DEPTH), "registry is full");
+    let next = simulate_register(&state, commitment, &path_before, leaf_index)
+        .unwrap_or_else(|e| panic!("register rejected: {e}"));
 
-    // 1. Verify the empty-leaf path matches the current root.
-    let zero_leaf: Hash = [0u8; 32];
-    let recomputed_before = fold_path(zero_leaf, &path_before, leaf_index);
-    assert_eq!(
-        recomputed_before, state.tree_root,
-        "supplied path does not match current tree_root"
-    );
-
-    // 2. Replace zero with commitment and fold to get new root.
-    let new_leaf = leaf_hash(&commitment);
-    let new_root = fold_path(new_leaf, &path_before, leaf_index);
-
-    state.tree_root = new_root;
-    state.next_leaf_index = leaf_index + 1;
-
-    let bytes = encode_state(&state);
+    let bytes = encode_state(&next);
     account.data = Data::try_from(bytes).expect("ForumState fits within Data limit");
 
     alloc::vec![AccountPostState::new(account)]

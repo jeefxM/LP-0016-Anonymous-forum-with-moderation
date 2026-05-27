@@ -143,20 +143,109 @@ pub mod tags {
     pub const NODE: &[u8] = b"node";
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Pure Rust Merkle / state helpers — usable by both the guest and host.
+//
+// The guest's RISC0 SHA-256 accelerator and `sha2::Sha256` produce
+// byte-identical outputs, so anything we test here also matches what the
+// guest computes on-chain.
+// ──────────────────────────────────────────────────────────────────────
+
+use sha2::{Digest, Sha256};
+
+fn sha256_concat(parts: &[&[u8]]) -> Hash {
+    let mut h = Sha256::new();
+    for p in parts {
+        h.update(p);
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&h.finalize()[..]);
+    out
+}
+
+/// `H_leaf(c) = SHA256("commit" || c)`.
+pub fn leaf_hash(commitment: &Commitment) -> Hash {
+    sha256_concat(&[tags::COMMIT, commitment])
+}
+
+/// `H_node(l, r) = SHA256("node" || l || r)`.
+pub fn node_hash(left: &Hash, right: &Hash) -> Hash {
+    sha256_concat(&[tags::NODE, left, right])
+}
+
+/// Folds a leaf up the tree using `path`. `index` selects sibling
+/// orientation per level (bit 0 = current is left child).
+pub fn fold_path(leaf: Hash, path: &MerklePath, index: u32) -> Hash {
+    let mut cur = leaf;
+    for level in 0..TREE_DEPTH {
+        let sibling = &path[level];
+        let bit = (index >> level) & 1;
+        cur = if bit == 0 {
+            node_hash(&cur, sibling)
+        } else {
+            node_hash(sibling, &cur)
+        };
+    }
+    cur
+}
+
+/// Empty-tree root: fold a zero leaf with zero siblings at index 0.
+pub fn empty_tree_root() -> Hash {
+    fold_path([0u8; 32], &[[0u8; 32]; TREE_DEPTH], 0)
+}
+
+/// Pure-rust re-impl of the guest's register logic. Used in host tests
+/// to verify the on-chain state transitions match what we expect.
+///
+/// Returns the new `ForumState` on success, or an error string if the
+/// guest's `assert!`s would have failed.
+pub fn simulate_register(
+    state: &ForumState,
+    commitment: Commitment,
+    path_before: &MerklePath,
+    leaf_index: u32,
+) -> Result<ForumState, &'static str> {
+    if leaf_index != state.next_leaf_index {
+        return Err("leaf_index must equal next_leaf_index");
+    }
+    if leaf_index >= MAX_LEAVES {
+        return Err("registry is full");
+    }
+    let recomputed = fold_path([0u8; 32], path_before, leaf_index);
+    if recomputed != state.tree_root {
+        return Err("supplied path does not match current tree_root");
+    }
+    let new_root = fold_path(leaf_hash(&commitment), path_before, leaf_index);
+    let mut next = state.clone();
+    next.tree_root = new_root;
+    next.next_leaf_index = leaf_index + 1;
+    Ok(next)
+}
+
+/// Build a sparse Merkle path for inserting the next leaf into an empty
+/// tree. Useful for host tests; production code will track the
+/// growing-tree's "frontier" of left siblings as members are added.
+pub fn empty_path() -> MerklePath {
+    [[0u8; 32]; TREE_DEPTH]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn instruction_roundtrips() {
-        let cfg = ForumConfig {
+    fn sample_config() -> ForumConfig {
+        ForumConfig {
             k_threshold: 3,
             n_threshold: 2,
             moderators: vec![[1u8; 32], [2u8; 32], [3u8; 32]],
             stake_amount: 1_000,
-        };
+        }
+    }
+
+    #[test]
+    fn instruction_roundtrips() {
         let inst = Instruction::Initialize {
-            config: cfg.clone(),
+            config: sample_config(),
             seed: [9u8; 32],
         };
         let bytes = serde_json::to_vec(&inst).unwrap();
@@ -168,11 +257,71 @@ mod tests {
     fn register_roundtrips() {
         let inst = Instruction::Register {
             commitment: [7u8; 32],
-            path_before: [[0u8; 32]; TREE_DEPTH],
+            path_before: empty_path(),
             leaf_index: 0,
         };
         let bytes = serde_json::to_vec(&inst).unwrap();
         let back: Instruction = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(inst, back);
+    }
+
+    /// `valid_registration` — one of the bounty-required test names.
+    ///
+    /// Initialises a forum, registers two distinct commitments, asserts
+    /// state advances and `tree_root` actually changes.
+    #[test]
+    fn valid_registration() {
+        let initial = ForumState {
+            tree_root: empty_tree_root(),
+            next_leaf_index: 0,
+            revocation_set: vec![],
+            config: sample_config(),
+        };
+
+        // Register member A at leaf 0.
+        let commitment_a: Commitment = [0xAAu8; 32];
+        let state_after_a = simulate_register(&initial, commitment_a, &empty_path(), 0)
+            .expect("first register must succeed");
+        assert_eq!(state_after_a.next_leaf_index, 1);
+        assert_ne!(state_after_a.tree_root, initial.tree_root);
+
+        // Register member B at leaf 1. Path includes the sibling-hash of
+        // leaf 0 at level 0 — we compute it the same way the host runner
+        // will when wiring this for real.
+        let mut path_for_b = empty_path();
+        path_for_b[0] = leaf_hash(&commitment_a);
+        let commitment_b: Commitment = [0xBBu8; 32];
+        let state_after_b = simulate_register(&state_after_a, commitment_b, &path_for_b, 1)
+            .expect("second register must succeed");
+        assert_eq!(state_after_b.next_leaf_index, 2);
+        assert_ne!(state_after_b.tree_root, state_after_a.tree_root);
+    }
+
+    #[test]
+    fn register_rejects_out_of_order_index() {
+        let state = ForumState {
+            tree_root: empty_tree_root(),
+            next_leaf_index: 0,
+            revocation_set: vec![],
+            config: sample_config(),
+        };
+        let err = simulate_register(&state, [1u8; 32], &empty_path(), 5)
+            .expect_err("leaf_index 5 with next_leaf_index 0 must fail");
+        assert_eq!(err, "leaf_index must equal next_leaf_index");
+    }
+
+    #[test]
+    fn register_rejects_tampered_path() {
+        let state = ForumState {
+            tree_root: empty_tree_root(),
+            next_leaf_index: 0,
+            revocation_set: vec![],
+            config: sample_config(),
+        };
+        let mut bad_path = empty_path();
+        bad_path[0] = [0xFFu8; 32]; // wrong sibling
+        let err = simulate_register(&state, [1u8; 32], &bad_path, 0)
+            .expect_err("tampered path must fail");
+        assert_eq!(err, "supplied path does not match current tree_root");
     }
 }
