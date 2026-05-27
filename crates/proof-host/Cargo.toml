@@ -11,3 +11,8 @@ description = "Host-side proof generation + verification for the post-proof gues
 serde = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+risc0-zkvm = { version = "3.0.5", features = ["std"] }
+
+[[bin]]
+name = "bench_any_elf"
+path = "src/bin/bench_any_elf.rs"
