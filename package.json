@@ -1,0 +1,21 @@
+{
+  "name": "forum-protocol",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Anonymous forum protocol with threshold moderation and membership revocation (LP-0016)",
+  "license": "MIT",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "lint": "tsc -b --noEmit",
+    "format": "echo 'Formatter pinned in ADR-TBD once we pick a Darwin-25-compatible tool'",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter app dev"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

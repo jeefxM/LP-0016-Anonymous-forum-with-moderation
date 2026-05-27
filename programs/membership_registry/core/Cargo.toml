@@ -1,0 +1,15 @@
+[package]
+name = "membership_registry_core"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Shared types for the membership_registry LEZ program (Instruction enum, state)"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+serde = { workspace = true }

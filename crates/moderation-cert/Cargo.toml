@@ -1,0 +1,14 @@
+[package]
+name = "moderation-cert"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "N-of-M moderation certificate construction, aggregation, and verification"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }

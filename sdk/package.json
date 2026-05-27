@@ -1,0 +1,25 @@
+{
+  "name": "@logos-forum/moderation-sdk",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Forum-agnostic SDK for threshold moderation and membership revocation on the Logos stack",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vitest": "2.1.3"
+  }
+}

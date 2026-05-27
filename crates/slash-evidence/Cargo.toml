@@ -1,0 +1,12 @@
+[package]
+name = "slash-evidence"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Aggregates moderation certificates and reconstructs the nullifier secret for slash submission"
+
+[dependencies]
+serde = { workspace = true }
+anyhow = { workspace = true }

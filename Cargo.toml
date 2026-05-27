@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "programs/membership_registry/core",
+    "crates/proof-host",
+    "crates/slash-evidence",
+    "crates/lez-runner",
+    "crates/moderation-cert",
+    "crates/proof-daemon",
+]
+# RISC0 guest crates (`programs/*/methods/guest`) are NOT workspace members.
+# They're built with `cargo risczero build` from their own manifests because
+# they target the riscv32im-risc0-zkvm-elf triple.
+exclude = [
+    "programs/membership_registry/methods/guest",
+    "programs/post_proof/methods/guest",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
+repository = "https://github.com/davitmaisuradze/forum-protocol"
+rust-version = "1.94"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"
+thiserror = "2"
+hex = "0.4"
+sha2 = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+# Pinned to match the LEZ workspace at ../lez (rust-toolchain 1.94, risc0 3.0.5).
+risc0-zkvm = { version = "3.0.5", default-features = false }
+risc0-build = "3.0.5"
+
+[profile.release]
+lto = true
+codegen-units = 1

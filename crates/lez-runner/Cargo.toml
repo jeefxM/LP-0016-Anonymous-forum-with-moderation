@@ -1,0 +1,12 @@
+[package]
+name = "lez-runner"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Host-side runner that builds and submits Register + Slash transactions to a LEZ sequencer"
+
+[dependencies]
+serde = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,16 @@
+{
+  "name": "app",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Reference Basecamp forum app — demo-quality consumer of the moderation SDK",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'Next.js app lands in P7'",
+    "build": "echo 'Next.js app lands in P7'",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@logos-forum/moderation-sdk": "workspace:*"
+  }
+}

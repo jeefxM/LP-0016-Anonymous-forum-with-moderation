@@ -1,0 +1,46 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# RISC0 build artifacts
+/artifacts/
+**/riscv32im-risc0-zkvm-elf/
+
+# Node
+node_modules/
+.pnpm-store/
+*.log
+*.tsbuildinfo
+
+# Next.js (under app/)
+app/.next/
+app/out/
+app/build/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Wallet artifacts — never commit
+wallet-storage/
+*.wallet.json
+
+# Test outputs
+coverage/
+.nyc_output/
+
+# Local sequencer state
+rocksdb/
+bedrock_signing_key/
