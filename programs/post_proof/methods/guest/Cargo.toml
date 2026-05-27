@@ -1,0 +1,23 @@
+[package]
+name = "post_proof_guest"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+description = "RISC0 guest: proves anonymous forum membership + emits Shamir share"
+
+[[bin]]
+name = "post_proof"
+path = "src/bin/post_proof.rs"
+
+[workspace]
+# Guest crates are intentionally outside the parent workspace because they
+# target the riscv32im-risc0-zkvm-elf triple and use a different toolchain.
+
+[dependencies]
+risc0-zkvm = { version = "3.0.5", default-features = false, features = ["std"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
