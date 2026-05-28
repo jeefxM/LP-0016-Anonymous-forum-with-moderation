@@ -215,7 +215,10 @@ pub fn simulate_register(
     if recomputed != state.tree_root {
         return Err("supplied path does not match current tree_root");
     }
-    let new_root = fold_path(leaf_hash(&commitment), path_before, leaf_index);
+    // Use the commitment directly as the leaf (no extra leaf_hash). Matches
+    // the post_proof guest's convention so a member registered here passes
+    // post_proof's membership check.
+    let new_root = fold_path(commitment, path_before, leaf_index);
     let mut next = state.clone();
     next.tree_root = new_root;
     next.next_leaf_index = leaf_index + 1;
@@ -285,11 +288,11 @@ mod tests {
         assert_eq!(state_after_a.next_leaf_index, 1);
         assert_ne!(state_after_a.tree_root, initial.tree_root);
 
-        // Register member B at leaf 1. Path includes the sibling-hash of
-        // leaf 0 at level 0 — we compute it the same way the host runner
-        // will when wiring this for real.
+        // Register member B at leaf 1. Path includes the sibling at
+        // level 0 — which is leaf 0 (member A's commitment, used directly
+        // as the leaf with no extra hashing).
         let mut path_for_b = empty_path();
-        path_for_b[0] = leaf_hash(&commitment_a);
+        path_for_b[0] = commitment_a;
         let commitment_b: Commitment = [0xBBu8; 32];
         let state_after_b = simulate_register(&state_after_a, commitment_b, &path_for_b, 1)
             .expect("second register must succeed");

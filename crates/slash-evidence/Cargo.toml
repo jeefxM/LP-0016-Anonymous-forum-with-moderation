@@ -10,3 +10,12 @@ description = "Aggregates moderation certificates and reconstructs the nullifier
 [dependencies]
 serde = { workspace = true }
 anyhow = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+post_proof_core = { path = "../../programs/post_proof/core" }
+moderation-cert = { path = "../moderation-cert" }
+membership_registry_core = { path = "../../programs/membership_registry/core" }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }

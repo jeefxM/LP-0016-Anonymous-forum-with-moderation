@@ -10,6 +10,8 @@
 
 extern crate alloc;
 
+pub mod shamir;
+
 use core::convert::TryInto;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

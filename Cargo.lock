@@ -1801,6 +1801,9 @@ dependencies = [
 name = "post_proof_core"
 version = "0.0.1"
 dependencies = [
+ "ark-bn254",
+ "ark-ff",
+ "ark-serialize",
  "hex",
  "serde",
  "sha2",
@@ -2737,7 +2740,14 @@ name = "slash-evidence"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "ed25519-dalek",
+ "membership_registry_core",
+ "moderation-cert",
+ "post_proof_core",
+ "rand 0.8.6",
  "serde",
+ "sha2",
+ "thiserror",
 ]
 
 [[package]]
