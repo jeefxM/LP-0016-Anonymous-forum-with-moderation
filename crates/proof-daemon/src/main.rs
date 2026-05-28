@@ -27,6 +27,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use tower_http::cors::{Any, CorsLayer};
 
 use state::{AppState, SharedState};
 
@@ -38,6 +39,14 @@ const MAX_BODY_BYTES: usize = 4 * 1024 * 1024;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let state: SharedState = std::sync::Arc::new(AppState::from_env()?);
+
+    // The reference app (P7) is a browser SPA that calls this daemon
+    // cross-origin. It's a localhost-only sidecar (ADR-004), so a permissive
+    // CORS policy is appropriate for the demo.
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
     let app = Router::new()
         .route("/v1/health", get(health))
@@ -57,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/post/prove", post(proving::prove_post))
         .route("/v1/post/verify", post(proving::verify_post))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(cors)
         .with_state(state);
 
     let addr = std::env::var("DAEMON_ADDR").unwrap_or_else(|_| "127.0.0.1:8787".to_string());

@@ -26,6 +26,7 @@ post_proof_core = { path = "../../programs/post_proof/core" }
 lez-runner = { path = "../lez-runner" }
 
 axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
