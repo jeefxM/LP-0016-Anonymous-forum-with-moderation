@@ -90,6 +90,32 @@ The daemon, like lez-runner, path-deps the LEZ sibling checkout and is
 - **Public LEZ testnet endpoint + faucet** — needed for P9's "two live
   instances." Not yet obtained; ask the Logos team.
 
+### Docs & housekeeping loose ends
+
+- **Unwritten ADRs.** `adr/README.md` indexes several decisions that are
+  made-and-applied in code but not yet written up as ADR files:
+  - ADR-004 (prover location = localhost daemon) — finalise during P6.2.
+  - ADR-005 (re-implement Semaphore+RLN natively; SHA-256 leaf hashing for
+    RISC0 perf, not Poseidon) — decision is live in the guests; write it up.
+  - ADR-006 (moderator key storage = password-encrypted software key) —
+    finalise during P7.
+- **CI workflow is stale.** `.github/workflows/ci.yml` was written in P0
+  against empty crates. It has never run against the real crates and the
+  guest builds (which need Hetzner + docker + ruint pin) aren't represented.
+  Revisit before relying on CI; the bounty requires "CI green on default
+  branch," so this needs real work in P8/P9.
+- **`pnpm lint` uses `tsc`, not biome.** Biome 1.9.4/2.4.16 segfaults on
+  this macOS (Darwin 25). Lint is `tsc -b --noEmit` for now. Revisit when
+  biome ships a working Darwin-25 binary, or pick another formatter.
+- **api-reference.md not generated.** The SDK's public API (sdk/src) has
+  full TSDoc; P8 should generate docs/api-reference.md from it (bounty
+  Usability requirement: "documented API").
+- **docs/protocol.md not written** — the bounty REQUIRES it (unlinkability
+  argument, anonymity-set analysis, retroactive-deanon-on-slash property,
+  moderator trust model, threat model). This is a hard P8 deliverable, not
+  optional. The material exists across ADR-002/003/008 + SPEC; needs
+  assembling into the required doc.
+
 ## Environment (CRITICAL — don't rediscover this)
 
 Everything chain/proof-related builds and runs on the **Hetzner box**
