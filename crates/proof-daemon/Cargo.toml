@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
 rust-version = "1.88"
-description = "Localhost HTTP daemon the TypeScript SDK calls to generate RISC0 proofs and submit LEZ transactions (see ADR-004)"
+description = "Localhost HTTP daemon the TypeScript SDK calls to generate Groth16 membership proofs and submit LEZ transactions (see ADR-004, ADR-010)"
 
 # NOT a member of the parent forum-protocol workspace (see root Cargo.toml
 # `exclude`). It depends on `lez-runner`, which path-deps the LEZ sibling
@@ -22,7 +22,6 @@ moderation-cert = { path = "../moderation-cert" }
 slash-evidence = { path = "../slash-evidence" }
 membership_registry_core = { path = "../../programs/membership_registry/core" }
 post_proof_core = { path = "../../programs/post_proof/core" }
-proof-host = { path = "../proof-host" }
 # Chain plumbing (re-exports the LEZ types we need; Hetzner-only).
 lez-runner = { path = "../lez-runner" }
 
@@ -35,5 +34,6 @@ thiserror = "2"
 hex = "0.4"
 base64 = "0.22"
 sha2 = "0.10"
+tempfile = "3"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"

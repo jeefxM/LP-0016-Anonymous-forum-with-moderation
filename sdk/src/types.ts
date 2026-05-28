@@ -60,7 +60,8 @@ export interface PostEnvelope {
 	/** Shamir share (x, y) of the member's secret, bound to this post. */
 	readonly shareX: Hex32;
 	readonly shareY: Hex32;
-	/** The RISC0 receipt proving all of the above. Base64. */
+	/** Groth16 proof + public signals proving all of the above (ADR-010),
+	 *  as base64(JSON {proof, publicSignals}). */
 	readonly receipt: string;
 }
 
@@ -109,7 +110,7 @@ export class ForumError extends Error {
 export type ForumErrorKind =
 	| "daemon_unreachable" // local proof daemon not running
 	| "bad_request" // malformed input rejected by the daemon
-	| "proof_failed" // RISC0 proof generation failed (retryable)
+	| "proof_failed" // membership proof generation failed (retryable)
 	| "invalid_proof" // a post envelope failed verification
 	| "revoked" // member is in the revocation set
 	| "below_threshold" // not enough votes/certs

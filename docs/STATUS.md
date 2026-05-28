@@ -89,18 +89,20 @@ tree-stateless). Delivered:
     `transport.ts`). Cluster 1 forces RLN (hangs without an eth RPC) — use a
     non-TWN cluster for local tests.
 
-## ACTIVE: perf gate — membership proof → Groth16 (ADR-010)
+## DONE: perf gate — membership proof → Groth16 (ADR-010)
 
 The `<10s` bounty criterion is **not** met by the risc0 zkVM membership
 proof (55–65s CPU) and **cannot be**: risc0 3.0.5 has no Metal backend
 (ADR-002 update), and a laptop has no CUDA. The bounty actually points to a
 **Semaphore/RLN circuit** for this proof (it calls it a "circuit"; posts are
-off-chain so the proof is verified off-chain, decoupled from LEZ). So we're
-replacing the risc0 `post_proof` with a **Groth16 circuit** (ADR-010,
+off-chain so the proof is verified off-chain, decoupled from LEZ). So the
+risc0 `post_proof` was replaced with a **Groth16 circuit** (ADR-010,
 decision 1b: keep the SHA-256 stack, only the off-chain prover/verifier
-changes). The risc0 LEZ register/slash program is unaffected.
+changed). The risc0 LEZ register/slash program is unaffected, and the
+circuit's emitted shares still satisfy the unchanged on-chain `verify_slash`
+(proven by the live slash in `lifecycle.mjs`).
 
-Tasks PERF-1..6:
+Tasks PERF-1..6 — **all done, live-verified**:
 - ✅ PERF-1 ADR-010 spec (byte-exact preimages + scope guard).
 - ✅ PERF-2 circom 2.2.3 installed; **pre-flight PASSED** — circomlib SHA-256
   over `"node"‖l‖r` is bit-identical to Rust sha2 (MSB-first bit order, 2-block
@@ -111,19 +113,29 @@ Tasks PERF-1..6:
   `validate.mjs`; Merkle-root constraint satisfied; mod-r field-LC trick
   confirmed). Compiled K=3.
 - ✅ PERF-4 ptau (2^21, zkevm bucket — hermez S3 is dead) + `groth16 setup`
-  on Hetzner → `membership_0.zkey` (678MB) + `vkey.json`. Skipped the
-  optional `contribute` (demo-grade ceremony); ptau deleted after.
-- ✅ PERF-5 (bench) **<10s GATE MET**: witness 2.35s + rapidsnark prove
-  2.36s = **~4.7s total**, verify OK (1.14M constraints). ~12× faster than
-  the 55–65s risc0 zkVM. Measured on Hetzner; witness is laptop-equivalent
-  (2.4s M2). rapidsnark built on Hetzner (Linux); native-Mac build hit
-  cmake-4/arm64 quirks (polish item). **Remaining: wire the daemon
-  `/v1/post/prove` to call rapidsnark instead of risc0.**
-- ⬜ PERF-6 SDK `verifyPostProof` → Groth16 verify; re-run `lifecycle.mjs`.
+  on Hetzner → `membership_0.zkey` (678MB) + `vkey.json` (committed). Skipped
+  the optional `contribute` (demo-grade ceremony); ptau deleted after.
+- ✅ PERF-5 **daemon wired to Groth16 + <10s GATE MET on the live path**:
+  `/v1/post/prove` now builds the circuit input, runs node witness-gen +
+  rapidsnark `prover`, and returns the Groth16 proof + public signals as the
+  `PostEnvelope.receipt` (`base64(JSON {proof, publicSignals})`, ~2KB). End to
+  end over HTTP: **4.63s** (status 200), outputs match the oracle byte-for-byte.
+  ~12× faster than the 55–65s risc0 zkVM. Witness is laptop-equivalent (2.4s
+  M2). rapidsnark built on Hetzner (Linux); native-Mac build is a polish item
+  (cmake-4/arm64 quirks).
+- ✅ PERF-6 daemon `/v1/post/verify` → snarkjs Groth16 verify **+ a
+  load-bearing bind check** (public signals must equal the envelope's
+  nullifier/shareX/shareY/treeRoot/epoch/contentId byte-for-byte, else a valid
+  proof could be replayed against a different context) + the existing on-chain
+  stale-root check. `lifecycle.mjs` is **green end-to-end** (register → 3
+  Groth16 posts → verify → moderate → slash → revoke) against the live daemon
+  + nwaku + chain.
 
-Toolchain: snarkjs 11.6.1 present; circom + rapidsnark being installed.
-Estimate ~3–5 days. This is the last hard technical item; everything else
-(P7 app, P8 docs, P9 demo/testnet) is packaging.
+Toolchain: circom 2.2.3 (`~/.cargo/bin/circom`), snarkjs 0.7.6 (global on
+Hetzner), rapidsnark `prover` at `~/rapidsnark/build_prover/src/prover`. The
+risc0 `post_proof` guest is now legacy (kept for history; off the live path).
+This was the last hard technical item; everything else (P7 app, P8 docs,
+P9 demo/testnet) is packaging.
 
 ## Next after the perf gate (P7)
 
@@ -187,13 +199,18 @@ the daemon — they're Waku (P6.4). Chain helpers were extracted into
 Proving helpers are in `crates/proof-host/src/lib.rs`. Smoke script:
 `crates/proof-daemon/smoke.sh` (needs `jq`).
 
-Run on Hetzner:
+Run on Hetzner (post-PERF: Groth16 prover, not risc0 — needs CIRCUIT_DIR +
+the rapidsnark prover; `RISC0_DEV_MODE=1` is still set for the register/slash
+*chain* proofs via lez-runner, which match the dev-mode sequencer):
 ```
+tmux new-session -d -s daemon "cd ~/forum-protocol/crates/proof-daemon && \
 NSSA_WALLET_HOME_DIR=~/lez/wallet/configs/debug \
 MEMBERSHIP_REGISTRY_BIN=~/forum-protocol/programs/membership_registry/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/membership_registry.bin \
-POST_PROOF_BIN=~/forum-protocol/programs/post_proof/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/post_proof.bin \
-RISC0_DEV_MODE=1 ./target/debug/proof-daemon
+CIRCUIT_DIR=~/circuits \
+RAPIDSNARK_PROVER=~/rapidsnark/build_prover/src/prover \
+RISC0_DEV_MODE=1 ./target/release/proof-daemon > ~/daemon.log 2>&1"
 ```
+(snarkjs must be on PATH for `/v1/post/verify`; `npm i -g snarkjs`.)
 
 ## Loose ends / backlog (these were tracked as in-session tasks)
 

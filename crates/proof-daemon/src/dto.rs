@@ -44,10 +44,6 @@ pub fn parse_merkle_path(items: &[String], field: &str) -> Result<MerklePath, Ap
     Ok(path)
 }
 
-pub fn b64_encode(bytes: &[u8]) -> String {
-    STANDARD.encode(bytes)
-}
-
 pub fn b64_decode(s: &str, field: &str) -> Result<Vec<u8>, ApiError> {
     STANDARD
         .decode(s)
@@ -334,7 +330,8 @@ pub struct PostEnvelopeDto {
     pub nullifier: String,
     pub share_x: String,
     pub share_y: String,
-    /// RISC0 receipt, base64.
+    /// Groth16 proof + public signals, as `base64(JSON {proof, publicSignals})`
+    /// (ADR-010).
     pub receipt: String,
 }
 

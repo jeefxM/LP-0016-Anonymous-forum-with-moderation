@@ -1,18 +1,19 @@
 //! Localhost HTTP daemon the TypeScript SDK calls (ADR-004). It wraps the
-//! proven Rust crates: pure-crypto (moderation-cert, slash-evidence),
-//! proving (proof-host + the post_proof guest), and chain submission
-//! (lez-runner → LEZ). The member's identity secret is sent only to
-//! localhost, never over the network.
+//! proven Rust crates: pure-crypto (moderation-cert, slash-evidence), the
+//! Groth16 membership prover (node + rapidsnark + snarkjs, ADR-010), and
+//! chain submission (lez-runner → LEZ). The member's identity secret is sent
+//! only to localhost, never over the network.
 //!
 //! Endpoints map 1:1 to the SDK functions in `sdk/src/index.ts`. Waku-only
 //! operations (publishCertificate, listCertificatesForMember) are NOT here —
 //! they live in the TS transport layer (P6.4).
 //!
-//! Build + run on Hetzner (needs the LEZ checkout + the prover + ELFs):
+//! Build + run on Hetzner (needs the LEZ checkout + the circuit artifacts):
 //!   NSSA_WALLET_HOME_DIR=~/lez/wallet/configs/debug \
 //!   MEMBERSHIP_REGISTRY_BIN=~/.../membership_registry.bin \
-//!   POST_PROOF_BIN=~/.../post_proof.bin \
-//!   RISC0_DEV_MODE=0 cargo run --release
+//!   CIRCUIT_DIR=~/circuits \
+//!   RAPIDSNARK_PROVER=~/rapidsnark/build_prover/src/prover \
+//!   cargo run --release
 
 mod chain;
 mod crypto;
@@ -29,10 +30,10 @@ use axum::{
 
 use state::{AppState, SharedState};
 
-/// Real-mode RISC0 receipts are hundreds of KB to a few MB, and they ride
-/// in the `/v1/post/verify` request body. Raise axum's 2 MB default so the
-/// SDK can round-trip a real envelope.
-const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
+/// Groth16 envelopes are tiny (~2 KB receipt), but slash bodies carry K
+/// certificates + Merkle paths. Keep a generous limit so the SDK can
+/// round-trip any request body.
+const MAX_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

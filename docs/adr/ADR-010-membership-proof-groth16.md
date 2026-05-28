@@ -137,6 +137,35 @@ The circuit's public outputs (nullifier/shareX/shareY) match Rust
 `prove_post` byte-for-byte (PERF-3), so the emitted share still satisfies the
 on-chain `verify_slash` unchanged.
 
+### Live daemon path (PERF-5 wiring + PERF-6)
+
+The daemon's `/v1/post/prove` now builds the circuit input from the request,
+shells to node (witness gen over `membership.wasm`) + the rapidsnark `prover`,
+and returns the proof + public signals as `PostEnvelope.receipt`
+(`base64(JSON {proof, publicSignals})`, ~2 KB). Measured **end to end over
+HTTP: 4.63 s** (status 200); the returned nullifier/shareX/shareY match the
+oracle byte-for-byte.
+
+`/v1/post/verify` decodes the receipt, runs `snarkjs groth16 verify` against
+the committed `vkey.json`, and — critically — **binds the verified public
+signals to the envelope byte-for-byte** (`[0..96]` = nullifier‖shareX‖shareY,
+`[96..128]` = treeRoot, `[128]` = epoch, `[129..161]` = contentId). Without
+this bind a valid proof could be replayed against a different
+(root, epoch, contentId); snarkjs alone only attests that *some* inputs
+satisfy the proof. The existing stale-root check (envelope root == current
+on-chain root) is retained.
+
+`sdk/tests/lifecycle.mjs` is green end-to-end against the live daemon + nwaku
++ chain: register → 3 Groth16-proved posts → verify → 2-of-3 moderation →
+slash → member revoked. The slash succeeding confirms the circuit's shares
+reconstruct the secret and satisfy the unchanged on-chain `verify_slash`.
+
+**Scope landed:** only `crates/proof-daemon` (`proving.rs` rewrite,
+`state.rs` circuit config, dropped the `proof-host`/risc0 dependency) + doc
+comments in `sdk/src/types.ts`. The LEZ program, `verify_slash`,
+`slash-evidence`, and the SDK `MerkleTree` are byte-identical — the scope
+guard above held.
+
 ## Consequences
 
 - Meets `<10s` on a standard laptop with no GPU (~4.7s measured; rapidsnark).
