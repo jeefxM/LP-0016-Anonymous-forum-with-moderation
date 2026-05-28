@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
         tree_root,
         epoch: 1,
         content_id: [42u8; 32],
+        k_threshold: 3,
     };
 
     let priv_bytes: [u8; PRIVATE_INPUTS_BYTES] = private.to_bytes();

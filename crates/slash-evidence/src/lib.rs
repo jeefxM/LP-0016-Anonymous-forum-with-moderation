@@ -408,6 +408,72 @@ mod tests {
         }
     }
 
+    /// Full cross-system coherence: the share that the `post_proof` guest
+    /// commits in its Journal is exactly the share `verify_slash` accepts.
+    /// This is the seam between the two guests — if their share math ever
+    /// diverged, a real post couldn't be slashed. We drive it through
+    /// `prove_post` (not `compute_share`) to exercise the actual guest path.
+    #[test]
+    fn post_proof_share_satisfies_verify_slash() {
+        use membership_registry_core::slash::verify_slash;
+        use post_proof_core::{build_singleton_tree, prove_post, PrivateInputs, PublicInputs};
+
+        let s = setup(3, 5, 3);
+        let config = ForumConfig {
+            k_threshold: s.k_threshold,
+            n_threshold: s.n_threshold,
+            moderators: s.mod_pubs.clone(),
+            stake_amount: 1_000,
+        };
+        // Member at leaf 0 of a singleton tree.
+        let (tree_root, siblings) = build_singleton_tree(&s.secret);
+
+        let cids = [[71u8; 32], [72u8; 32], [73u8; 32]];
+        let certs: Vec<_> = cids
+            .iter()
+            .enumerate()
+            .map(|(i, cid)| {
+                // Run the actual post-proof construction to get the share.
+                let journal = prove_post(
+                    &PrivateInputs {
+                        secret: s.secret,
+                        merkle_siblings: siblings,
+                        merkle_path_bits: 0,
+                    },
+                    &PublicInputs {
+                        tree_root,
+                        epoch: 1,
+                        content_id: *cid,
+                        k_threshold: s.k_threshold as u32,
+                    },
+                )
+                .expect("post proof");
+                // Moderators sign over the guest-emitted share.
+                let votes: Vec<_> = s
+                    .mod_secrets
+                    .iter()
+                    .take(s.n_threshold as usize)
+                    .map(|sk| sign_vote(sk, *cid, i as u8, journal.share_x, journal.share_y))
+                    .collect();
+                moderation_cert::aggregate(&votes, s.n_threshold).unwrap()
+            })
+            .collect();
+
+        // The tree built by build_singleton_tree must match what the registry
+        // would hold; verify_slash uses commitment-as-leaf with the same path.
+        let commitment = verify_slash(
+            &s.secret,
+            &certs,
+            &config,
+            tree_root,
+            0,
+            &siblings,
+            &[],
+        )
+        .expect("guest-emitted shares must satisfy on-chain verify_slash");
+        assert_eq!(commitment, commitment_of(&s.secret));
+    }
+
     /// On-chain verify_slash accepts a correctly-reconstructed secret with
     /// K valid share-bound certs.
     #[test]

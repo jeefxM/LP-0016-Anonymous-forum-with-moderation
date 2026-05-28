@@ -49,8 +49,8 @@ pub const PRIVATE_INPUTS_BYTES: usize = 32 + TREE_DEPTH * 32 + 4;
 pub const PRIVATE_INPUTS_U32S: usize = PRIVATE_INPUTS_BYTES / 4;
 
 /// Total public-input size in bytes. 32 (tree_root) + 8 (epoch) + 32
-/// (content_id) = 72 bytes = 18 u32 words.
-pub const PUBLIC_INPUTS_BYTES: usize = 32 + 8 + 32;
+/// (content_id) + 4 (k_threshold) = 76 bytes = 19 u32 words.
+pub const PUBLIC_INPUTS_BYTES: usize = 32 + 8 + 32 + 4;
 pub const PUBLIC_INPUTS_U32S: usize = PUBLIC_INPUTS_BYTES / 4;
 
 /// Encoded form sent to the guest as a contiguous byte slice.
@@ -66,6 +66,9 @@ pub struct PublicInputs {
     pub tree_root: Hash,
     pub epoch: u64,
     pub content_id: Hash,
+    /// Forum instance's K (revocation threshold). Sets the degree of the
+    /// member's Shamir polynomial so K shares reconstruct the secret.
+    pub k_threshold: u32,
 }
 
 impl PrivateInputs {
@@ -106,6 +109,7 @@ impl PublicInputs {
         out[0..32].copy_from_slice(&self.tree_root);
         out[32..40].copy_from_slice(&self.epoch.to_le_bytes());
         out[40..72].copy_from_slice(&self.content_id);
+        out[72..76].copy_from_slice(&self.k_threshold.to_le_bytes());
         out
     }
 
@@ -115,10 +119,12 @@ impl PublicInputs {
         let epoch = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
         let mut content_id = [0u8; 32];
         content_id.copy_from_slice(&bytes[40..72]);
+        let k_threshold = u32::from_le_bytes(bytes[72..76].try_into().unwrap());
         Self {
             tree_root,
             epoch,
             content_id,
+            k_threshold,
         }
     }
 }
@@ -174,6 +180,7 @@ pub fn prove_post_from_bytes(
     let tree_root: &[u8; 32] = pub_bytes[0..32].try_into().unwrap();
     let epoch_bytes: &[u8; 8] = pub_bytes[32..40].try_into().unwrap();
     let content_id: &[u8; 32] = pub_bytes[40..72].try_into().unwrap();
+    let k_threshold = u32::from_le_bytes(pub_bytes[72..76].try_into().unwrap()) as usize;
 
     // 1. Membership: commitment of secret lies in the published tree.
     let commitment = commitment_of(secret);
@@ -197,13 +204,15 @@ pub fn prove_post_from_bytes(
     // 2. Nullifier ties this post to (secret, epoch).
     let nullifier = sha256_concat(&[tags::NULL, secret, epoch_bytes]);
 
-    // 3. Shamir-style share placeholder. Real GF arithmetic lands in P5.
-    let share_x = sha256_concat(&[tags::SHARE_X, secret, content_id]);
-    let share_mask = sha256_concat(&[tags::SHARE_Y, epoch_bytes, content_id, &share_x]);
-    let mut share_y = [0u8; 32];
-    for i in 0..32 {
-        share_y[i] = secret[i] ^ share_mask[i];
-    }
+    // 3. Real Shamir share over BN254 Fr. The member's degree-(K-1)
+    //    polynomial is deterministic in (secret, K); share_x is unique per
+    //    content_id. Collecting K shares (via K moderation certs)
+    //    reconstructs the secret on slash. This is the share the
+    //    membership_registry's verify_slash checks against — they MUST
+    //    agree, which the vendored-shamir cross-check test enforces.
+    let (x_fr, y_fr) = shamir::compute_share(secret, k_threshold, content_id);
+    let share_x = shamir::fr_to_bytes(&x_fr);
+    let share_y = shamir::fr_to_bytes(&y_fr);
 
     Ok(Journal {
         tree_root: *tree_root,
@@ -259,6 +268,7 @@ mod tests {
             tree_root: [1u8; 32],
             epoch: 1_234_567,
             content_id: [42u8; 32],
+            k_threshold: 3,
         };
         let bytes = public.to_bytes();
         let back = PublicInputs::from_bytes(&bytes);
@@ -278,6 +288,7 @@ mod tests {
             tree_root: root,
             epoch: 1,
             content_id: [42u8; 32],
+            k_threshold: 3,
         };
         let journal = prove_post(&private, &public).expect("happy path should succeed");
         assert_eq!(journal.tree_root, root);
@@ -301,6 +312,7 @@ mod tests {
             tree_root: root,
             epoch: 1,
             content_id: [42u8; 32],
+            k_threshold: 3,
         };
         assert!(prove_post(&private, &public).is_err());
     }
@@ -318,6 +330,7 @@ mod tests {
             tree_root: root,
             epoch: 1,
             content_id: [42u8; 32],
+            k_threshold: 3,
         };
         assert!(prove_post(&private, &public).is_err());
     }
@@ -337,6 +350,7 @@ mod tests {
                     tree_root: root,
                     epoch,
                     content_id: content,
+            k_threshold: 3,
                 },
             )
             .unwrap()
