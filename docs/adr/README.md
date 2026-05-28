@@ -18,6 +18,7 @@ Filename: `ADR-NNN-short-kebab-title.md`.
 | ADR-006 | Moderator key storage: password-encrypted software key | Pending (P7) |
 | [ADR-009](./ADR-009-waku-transport.md) | Waku transport: topics, symmetric-only encryption, nullifier-keyed certs | Accepted |
 | [ADR-010](./ADR-010-membership-proof-groth16.md) | Membership post-proof = Groth16 circuit (SHA-256, keep stack); supersedes ADR-005's prover for posts | Accepted |
+| [ADR-011](./ADR-011-staking-via-chained-call-escrow.md) | Staking: registry-owned escrow PDA; register chains authenticated_transfer; slash direct-debits | Accepted |
 
 ## Template
 
