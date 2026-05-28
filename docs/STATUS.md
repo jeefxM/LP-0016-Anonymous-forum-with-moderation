@@ -137,6 +137,35 @@ risc0 `post_proof` guest is now legacy (kept for history; off the live path).
 This was the last hard technical item; everything else (P7 app, P8 docs,
 P9 demo/testnet) is packaging.
 
+## Staking (ADR-011) — in progress
+
+Closing the "register with a stake" / slash "claims the stake" gap.
+
+- ✅ Design: **ADR-011** (registry-owned escrow PDA; Register chains
+  `authenticated_transfer.Transfer(member → escrow)` / member funds it first;
+  Slash direct-debits `escrow → slasher` since the registry owns the escrow).
+- ✅ Core primitives: `staking::{AuthTransferInstruction, escrow_seed}` in
+  `membership_registry_core` (vendored enum, tested).
+- ✅ Guest: `Initialize` claims the escrow PDA, `Register` requires the escrow
+  to hold `stake_amount` per member (rejects a substituted escrow by deriving
+  its PDA), `Slash` pays `stake_amount` to the slasher. **Built + validated in
+  the risc0 docker builder** → new **ImageID
+  `7c4caee9cb41073b0bae27c5fce0cf74a42136604a01da07051066dfb5769259`** (not
+  yet deployed/wired). Supersedes the old `6eca79ea…` registry ImageID.
+- ⬜ Remaining (the slow live stretch):
+  - **Funding**: a member moves `stake_amount` native into the escrow before
+    register. `WalletCore` has `NativeTokenTransfer::send_public_transfer`
+    (authenticated_transfer), but it spends the account's **direct** balance —
+    and genesis funds supply accounts into their **vaults**. Open question:
+    does the daemon wallet hold direct balance, or must it `vault.Claim` first
+    (no wallet facade for Claim — would be built manually)? Resolve before
+    wiring the runner.
+  - **lez-runner**: `initialize`/`register`/`slash` reshaped to pass the escrow
+    (+ slasher) accounts; add the funding step.
+  - **daemon DTOs/handlers + SDK** to thread the accounts through.
+  - **live e2e**: register-locks-stake → slash-claims-stake, confirming the
+    three "confirm during build" items in ADR-011.
+
 ## Next after the perf gate (P7)
 
 P6 is complete and live-verified end to end. Next is **P7**: the reference
