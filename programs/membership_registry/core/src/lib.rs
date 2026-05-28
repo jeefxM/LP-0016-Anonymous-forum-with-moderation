@@ -47,10 +47,7 @@ pub enum Instruction {
     /// `seed` is the 32-byte PDA seed the program claims under. The
     /// runner is responsible for deriving the same seed when computing
     /// the target `AccountId` for the transaction.
-    Initialize {
-        config: ForumConfig,
-        seed: [u8; 32],
-    },
+    Initialize { config: ForumConfig, seed: [u8; 32] },
 
     /// Register a new member commitment. Caller supplies the empty-leaf
     /// path so the guest can verify against the current `tree_root` and

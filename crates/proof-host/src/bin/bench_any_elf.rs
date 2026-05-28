@@ -38,14 +38,8 @@ fn main() -> anyhow::Result<()> {
         Ok(prove_info) => {
             eprintln!("✅ prove() OK in {:.2?}", elapsed);
             eprintln!("Total cycles: {}", prove_info.stats.total_cycles);
-            eprintln!(
-                "User cycles:  {}",
-                prove_info.stats.user_cycles
-            );
-            eprintln!(
-                "Segments:     {}",
-                prove_info.stats.segments
-            );
+            eprintln!("User cycles:  {}", prove_info.stats.user_cycles);
+            eprintln!("Segments:     {}", prove_info.stats.segments);
         }
         Err(e) => {
             eprintln!(

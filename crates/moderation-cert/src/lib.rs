@@ -16,9 +16,7 @@
 //! - [`verify`] — check a cert is well-formed and from registered moderators
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use membership_registry_core::{
-    Hash, ModerationCertificateWire, ModeratorPubKey, ModeratorSig,
-};
+use membership_registry_core::{Hash, ModerationCertificateWire, ModeratorPubKey, ModeratorSig};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -103,7 +101,10 @@ pub fn sign_vote(
 /// (content_id, strike_index).
 pub fn aggregate(votes: &[Vote], n_threshold: u8) -> Result<ModerationCertificateWire, CertError> {
     if votes.is_empty() {
-        return Err(CertError::BelowThreshold { n: n_threshold, got: 0 });
+        return Err(CertError::BelowThreshold {
+            n: n_threshold,
+            got: 0,
+        });
     }
     let first = &votes[0];
     let content_id = first.content_id;
@@ -125,8 +126,8 @@ pub fn aggregate(votes: &[Vote], n_threshold: u8) -> Result<ModerationCertificat
     let msg = message_to_sign(&content_id, strike_index, &share_x, &share_y);
     let mut accepted: Vec<(ModeratorPubKey, ModeratorSig)> = Vec::with_capacity(votes.len());
     for v in votes {
-        let pubkey = VerifyingKey::from_bytes(&v.moderator_pub)
-            .map_err(|_| CertError::BadPubkey)?;
+        let pubkey =
+            VerifyingKey::from_bytes(&v.moderator_pub).map_err(|_| CertError::BadPubkey)?;
         let sig = Signature::from_bytes(&v.signature.0);
         pubkey
             .verify(&msg, &sig)
@@ -321,10 +322,7 @@ mod tests {
     fn rejects_tampered_signature_in_verify() {
         let (secrets, publics) = make_moderators(3);
         let content_id: Hash = [0xEEu8; 32];
-        let votes: Vec<Vote> = secrets
-            .iter()
-            .map(|sk| sv(sk, content_id, 0))
-            .collect();
+        let votes: Vec<Vote> = secrets.iter().map(|sk| sv(sk, content_id, 0)).collect();
         let mut cert = aggregate(&votes, 3).unwrap();
         cert.signatures[0].1 .0[0] ^= 0xFF; // flip a bit
         let err = verify(&cert, &publics, 3).unwrap_err();

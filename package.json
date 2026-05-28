@@ -6,7 +6,7 @@
   "license": "MIT",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "lint": "tsc -b --noEmit",
+    "lint": "pnpm -r lint",
     "format": "echo 'Formatter pinned in ADR-TBD once we pick a Darwin-25-compatible tool'",
     "test": "pnpm -r test",
     "build": "pnpm -r build",

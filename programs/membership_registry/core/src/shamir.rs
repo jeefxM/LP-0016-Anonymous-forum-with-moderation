@@ -143,11 +143,7 @@ pub fn lagrange_interpolate(points: &[(Fr, Fr)], target: Fr) -> Result<Fr, &'sta
 
 /// Compute a single post's share. Convenience for the host side; the
 /// guest performs the equivalent computation inline.
-pub fn compute_share(
-    secret: &[u8; 32],
-    k_threshold: usize,
-    content_id: &[u8; 32],
-) -> (Fr, Fr) {
+pub fn compute_share(secret: &[u8; 32], k_threshold: usize, content_id: &[u8; 32]) -> (Fr, Fr) {
     let coeffs = polynomial_coefficients(secret, k_threshold);
     let x = derive_share_x(secret, content_id);
     let y = poly_eval(&coeffs, x);
@@ -165,7 +161,8 @@ pub fn reconstruct_secret(shares: &[(Fr, Fr)]) -> Result<[u8; 32], &'static str>
 /// or LEZ instruction boundary.
 pub fn fr_to_vec(f: &Fr) -> Vec<u8> {
     let mut out = Vec::new();
-    f.serialize_compressed(&mut out).expect("Fr always serialises");
+    f.serialize_compressed(&mut out)
+        .expect("Fr always serialises");
     out
 }
 

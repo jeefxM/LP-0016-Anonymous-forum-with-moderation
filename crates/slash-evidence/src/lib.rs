@@ -277,7 +277,11 @@ mod tests {
     /// Build a cert whose bound share is the member's real post-proof share
     /// for `content_id`. This mirrors what a moderator does: read the share
     /// off the flagged post envelope, then sign over it.
-    fn build_cert(setup: &TestSetup, content_id: Hash, strike_index: u8) -> ModerationCertificateWire {
+    fn build_cert(
+        setup: &TestSetup,
+        content_id: Hash,
+        strike_index: u8,
+    ) -> ModerationCertificateWire {
         let (x_fr, y_fr) = compute_share(&setup.secret, setup.k_threshold as usize, &content_id);
         let share_x = shamir::fr_to_bytes(&x_fr);
         let share_y = shamir::fr_to_bytes(&y_fr);
@@ -478,16 +482,8 @@ mod tests {
 
         // The tree built by build_singleton_tree must match what the registry
         // would hold; verify_slash uses commitment-as-leaf with the same path.
-        let commitment = verify_slash(
-            &s.secret,
-            &certs,
-            &config,
-            tree_root,
-            0,
-            &siblings,
-            &[],
-        )
-        .expect("guest-emitted shares must satisfy on-chain verify_slash");
+        let commitment = verify_slash(&s.secret, &certs, &config, tree_root, 0, &siblings, &[])
+            .expect("guest-emitted shares must satisfy on-chain verify_slash");
         assert_eq!(commitment, commitment_of(&s.secret));
     }
 
@@ -546,8 +542,8 @@ mod tests {
         // Attacker submits a DIFFERENT secret with A's certs.
         let mut forged = [0u8; 32];
         forged[0..16].copy_from_slice(&[0x11u8; 16]);
-        let err = verify_slash(&forged, &certs, &config, s.tree_root, 0, &s.leaf_path, &[])
-            .unwrap_err();
+        let err =
+            verify_slash(&forged, &certs, &config, s.tree_root, 0, &s.leaf_path, &[]).unwrap_err();
         assert_eq!(err, SlashVerifyError::ShareXMismatch { idx: 0 });
     }
 
@@ -570,8 +566,16 @@ mod tests {
             .collect();
         // Strip one signature from the first cert so it falls below N=3.
         certs[0].signatures.pop();
-        let err = verify_slash(&s.secret, &certs, &config, s.tree_root, 0, &s.leaf_path, &[])
-            .unwrap_err();
+        let err = verify_slash(
+            &s.secret,
+            &certs,
+            &config,
+            s.tree_root,
+            0,
+            &s.leaf_path,
+            &[],
+        )
+        .unwrap_err();
         assert_eq!(err, SlashVerifyError::CertBelowNThreshold { idx: 0 });
     }
 

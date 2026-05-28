@@ -276,9 +276,9 @@ mod tests {
         let private = PrivateInputs {
             secret: [1u8; 32],
             merkle_siblings: [
-                [2u8; 32], [3u8; 32], [4u8; 32], [5u8; 32], [6u8; 32], [7u8; 32],
-                [8u8; 32], [9u8; 32], [10u8; 32], [11u8; 32], [12u8; 32], [13u8; 32],
-                [14u8; 32], [15u8; 32], [16u8; 32], [17u8; 32],
+                [2u8; 32], [3u8; 32], [4u8; 32], [5u8; 32], [6u8; 32], [7u8; 32], [8u8; 32],
+                [9u8; 32], [10u8; 32], [11u8; 32], [12u8; 32], [13u8; 32], [14u8; 32], [15u8; 32],
+                [16u8; 32], [17u8; 32],
             ],
             merkle_path_bits: 0xCAFE_BABE,
         };
@@ -375,7 +375,7 @@ mod tests {
                     tree_root: root,
                     epoch,
                     content_id: content,
-            k_threshold: 3,
+                    k_threshold: 3,
                 },
             )
             .unwrap()
@@ -403,8 +403,17 @@ mod tests {
         let (root, siblings) = build_singleton_tree(&secret);
         let post = |epoch: u64| {
             prove_post(
-                &PrivateInputs { secret, merkle_siblings: siblings, merkle_path_bits: 0 },
-                &PublicInputs { tree_root: root, epoch, content_id: [9u8; 32], k_threshold: 3 },
+                &PrivateInputs {
+                    secret,
+                    merkle_siblings: siblings,
+                    merkle_path_bits: 0,
+                },
+                &PublicInputs {
+                    tree_root: root,
+                    epoch,
+                    content_id: [9u8; 32],
+                    k_threshold: 3,
+                },
             )
             .unwrap()
         };
