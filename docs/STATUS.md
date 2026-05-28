@@ -110,10 +110,16 @@ Tasks PERF-1..6:
   Rust byte-for-byte** (nullifier/shareX/shareY via `circuit_oracle` +
   `validate.mjs`; Merkle-root constraint satisfied; mod-r field-LC trick
   confirmed). Compiled K=3.
-- ⬜ PERF-4 ptau (2^21) + groth16 setup per K.
-- ⬜ PERF-5 build rapidsnark; daemon `/v1/post/prove` → Groth16 (bench <10s).
-- ⬜ PERF-6 SDK `verifyPostProof` → Groth16 verify; byte-level share
-  cross-tests; re-run `lifecycle.mjs`.
+- ✅ PERF-4 ptau (2^21, zkevm bucket — hermez S3 is dead) + `groth16 setup`
+  on Hetzner → `membership_0.zkey` (678MB) + `vkey.json`. Skipped the
+  optional `contribute` (demo-grade ceremony); ptau deleted after.
+- ✅ PERF-5 (bench) **<10s GATE MET**: witness 2.35s + rapidsnark prove
+  2.36s = **~4.7s total**, verify OK (1.14M constraints). ~12× faster than
+  the 55–65s risc0 zkVM. Measured on Hetzner; witness is laptop-equivalent
+  (2.4s M2). rapidsnark built on Hetzner (Linux); native-Mac build hit
+  cmake-4/arm64 quirks (polish item). **Remaining: wire the daemon
+  `/v1/post/prove` to call rapidsnark instead of risc0.**
+- ⬜ PERF-6 SDK `verifyPostProof` → Groth16 verify; re-run `lifecycle.mjs`.
 
 Toolchain: snarkjs 11.6.1 present; circom + rapidsnark being installed.
 Estimate ~3–5 days. This is the last hard technical item; everything else

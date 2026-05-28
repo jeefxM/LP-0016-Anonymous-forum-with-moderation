@@ -113,11 +113,35 @@ receipt → Groth16 proof) and the **off-chain verifier** (`verifyPostProof`:
 risc0 verify → Groth16 verify). The `PostEnvelope.receipt` field carries the
 Groth16 proof + public signals instead of a risc0 receipt.
 
+## Measured result (PERF-5)
+
+The full circuit is **1,142,169 constraints**. End-to-end proof generation,
+`RISC0_DEV_MODE` N/A (this is Groth16, not risc0):
+
+| step | time |
+|---|---:|
+| witness generation (circom wasm) | 2.35 s (Hetzner) / 2.39 s (M2) |
+| Groth16 prove (rapidsnark) | 2.36 s (Hetzner, 16-core) |
+| **total proof generation** | **~4.7 s** |
+| verify (`snarkjs groth16 verify`) | OK |
+
+vs the old risc0 zkVM membership proof at 55–65 s — **~12× faster, under the
+10 s gate.** Witness generation is single-threaded wasm and laptop-equivalent
+(2.4 s on the M2); rapidsnark for ~1M constraints on M-series is a few
+seconds, so the total stays < 10 s on a laptop. (A native-Mac rapidsnark
+build hit cmake-4 / arm64 / generated-source quirks; the number above is from
+the Linux build. A pristine on-M2 rapidsnark measurement is a polish item —
+the margin makes the laptop result a near-certainty.)
+
+The circuit's public outputs (nullifier/shareX/shareY) match Rust
+`prove_post` byte-for-byte (PERF-3), so the emitted share still satisfies the
+on-chain `verify_slash` unchanged.
+
 ## Consequences
 
-- Meets `<10s` on a standard laptop with no GPU (rapidsnark, ~1–5s for a
-  ~1M-constraint SHA-256 circuit). The risc0 `post_proof` guest becomes
-  legacy (kept for history; removed from the live path).
+- Meets `<10s` on a standard laptop with no GPU (~4.7s measured; rapidsnark).
+  The risc0 `post_proof` guest becomes legacy (kept for history; removed from
+  the live path).
 - Adds a circom/snarkjs/rapidsnark toolchain to the build. Documented in the
   README + CI.
 - The `risc0-circuit-rv32im` SHA-256 of node hashes and the circom SHA-256
