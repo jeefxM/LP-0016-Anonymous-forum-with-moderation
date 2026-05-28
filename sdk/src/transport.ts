@@ -6,6 +6,8 @@
 // join/ordering logic is factored out (selectCertsForNullifier,
 // RegistrationSync) so it is unit-testable without a live node.
 
+import { webSockets } from "@libp2p/websockets";
+import { all as allWebsocketFilters } from "@libp2p/websockets/filters";
 import {
 	createLightNode,
 	type IDecodedMessage,
@@ -38,9 +40,10 @@ export interface TransportOptions {
 	peers: string[];
 	/** Per-forum symmetric key for posts + certs (32 bytes). */
 	forumKey: Uint8Array;
-	/** Static-sharding cluster/shard the nwaku node serves. */
+	/** Waku network the nwaku node serves (autosharding). Defaults to The
+	 *  Waku Network (cluster 1, 8 shards). */
 	clusterId?: number;
-	shard?: number;
+	numShardsInCluster?: number;
 }
 
 function topics(forumId: string) {
@@ -140,7 +143,16 @@ export class WakuTransport {
 	}
 
 	static async connect(opts: TransportOptions): Promise<WakuTransport> {
-		const node = await createLightNode({ defaultBootstrap: false });
+		const node = await createLightNode({
+			defaultBootstrap: false,
+			networkConfig: {
+				clusterId: opts.clusterId ?? 1,
+				numShardsInCluster: opts.numShardsInCluster ?? 8,
+			},
+			// Allow dialing plaintext `/ws` peers (e.g. a self-hosted nwaku).
+			// The default filter is wss-only, which rejects insecure ws.
+			libp2p: { transports: [webSockets({ filter: allWebsocketFilters })] },
+		});
 		await node.start();
 		try {
 			for (const peer of opts.peers) await node.dial(peer);

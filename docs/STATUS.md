@@ -34,8 +34,8 @@ novel is done; the rest is packaging with no remaining crypto unknowns.
 | ↳ P6.1 SDK public API surface | ✅ done (`sdk/src/{types,index}.ts`, typechecks) |
 | ↳ P6.2 proof-daemon (Rust HTTP) | ✅ done; **11/12 endpoints smoke-verified on live chain (dev + real mode); slash/submit library-verified** |
 | ↳ P6.3 SDK client → daemon | ✅ done; **full lifecycle verified live via SDK imports** |
-| ↳ P6.4 Waku transport (js-waku) | 🟡 built + unit-verified + tsc clean; **live nwaku round-trip still pending** |
-| ↳ P6.5 SDK smoke test | 🟡 largely covered by `sdk/tests/integration.mjs`; finish once Waku live-verified |
+| ↳ P6.4 Waku transport (js-waku) | ✅ done; **live round-trip verified against nwaku** |
+| ↳ P6.5 SDK smoke test | 🟡 chain+proof lifecycle (integration.mjs) + Waku round-trip (waku-integration.mjs) both green; a single combined run is the remaining nicety |
 | P7 Reference Basecamp app | ⬜ not started |
 | P8 Docs + IDL (SPEL) | ⬜ not started |
 | P9 Demo + testnet deploy + video | ⬜ not started |
@@ -74,9 +74,20 @@ tree-stateless). Delivered:
   override — `@waku/enr@0.0.33` needs the v12 `./convert` subpath that v13
   removed. Without it `@waku/sdk` won't even import. Clean reinstall applied.
 - Verified: 20 vitest tests (incl. transport join/ordering) + `tsc` clean.
-- **NOT yet verified:** the live Waku network round-trip (publish→store/
-  filter→receive) against a real nwaku, and slash-by-nullifier end-to-end.
-  That's the remaining P6.4 step (#63) — needs a local nwaku node brought up.
+- **Live-verified** against a local nwaku (`sdk/tests/waku-integration.mjs`,
+  run ON Hetzner — no tunnel): Filter delivery, Store `listCertificatesBy
+  Nullifier` join, and ordered registration tree-sync all green.
+  - nwaku run (cluster 2, autosharding 8, **websocket-support**, no RLN):
+    `docker run -d --name nwaku -p127.0.0.1:60000:60000 -p127.0.0.1:8000:8000
+    -p127.0.0.1:8645:8645 wakuorg/nwaku:latest --tcp-port=60000
+    --websocket-support=true --websocket-port=8000 --rest=true
+    --rest-address=0.0.0.0 --relay --lightpush --filter --store --cluster-id=2
+    --num-shards-in-network=8 --shard=0..7 --nat=extip:127.0.0.1`
+  - Gotchas (now handled in code): a Node light node has **no TCP transport**
+    and its websockets default to **wss-only** — must dial a `/ws` multiaddr
+    AND override libp2p with `webSockets({ filter: all })` (see
+    `transport.ts`). Cluster 1 forces RLN (hangs without an eth RPC) — use a
+    non-TWN cluster for local tests.
 
 ## Immediate next action (P6.4 finish, then P7)
 

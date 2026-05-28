@@ -23,6 +23,9 @@ importers:
 
   sdk:
     dependencies:
+      '@libp2p/websockets':
+        specifier: 9.2.16
+        version: 9.2.16
       '@waku/message-encryption':
         specifier: ^0.0.38
         version: 0.0.38(@multiformats/multiaddr@12.5.1)(libp2p@2.8.11)

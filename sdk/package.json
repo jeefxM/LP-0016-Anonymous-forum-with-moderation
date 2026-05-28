@@ -23,6 +23,7 @@
     "vitest": "2.1.3"
   },
   "dependencies": {
+    "@libp2p/websockets": "9.2.16",
     "@waku/message-encryption": "^0.0.38",
     "@waku/sdk": "^0.0.36"
   }
