@@ -1,12 +1,39 @@
 [package]
 name = "proof-daemon"
 version = "0.0.1"
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-rust-version.workspace = true
-description = "Localhost HTTP daemon the TypeScript SDK calls to generate RISC0 proofs (see ADR-004)"
+edition = "2021"
+license = "MIT"
+authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
+rust-version = "1.88"
+description = "Localhost HTTP daemon the TypeScript SDK calls to generate RISC0 proofs and submit LEZ transactions (see ADR-004)"
+
+# NOT a member of the parent forum-protocol workspace (see root Cargo.toml
+# `exclude`). It depends on `lez-runner`, which path-deps the LEZ sibling
+# checkout — only present on the build host (Hetzner). Build it there.
+[workspace]
+
+[[bin]]
+name = "proof-daemon"
+path = "src/main.rs"
 
 [dependencies]
-serde = { workspace = true }
-anyhow = { workspace = true }
+# Pure-crypto + proving crates (also workspace members; Mac-buildable).
+moderation-cert = { path = "../moderation-cert" }
+slash-evidence = { path = "../slash-evidence" }
+membership_registry_core = { path = "../../programs/membership_registry/core" }
+post_proof_core = { path = "../../programs/post_proof/core" }
+proof-host = { path = "../proof-host" }
+# Chain plumbing (re-exports the LEZ types we need; Hetzner-only).
+lez-runner = { path = "../lez-runner" }
+
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+hex = "0.4"
+base64 = "0.22"
+sha2 = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"

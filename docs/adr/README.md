@@ -13,7 +13,7 @@ Filename: `ADR-NNN-short-kebab-title.md`.
 | [ADR-001](./ADR-001-waku-only-storage.md) | Waku-only storage; defer Codex | Accepted |
 | ADR-002 | RISC0 feasibility for post-proof (>10s pivot?) | Pending (P1.5) |
 | ADR-003 | Threshold signature scheme: naive ≥N Ed25519 | Pending (P4) |
-| ADR-004 | RISC0 prover location: localhost daemon | Pending (P6) |
+| [ADR-004](./ADR-004-prover-location-and-stateless-daemon.md) | Prover location: localhost daemon; daemon stateless about the tree | Accepted |
 | ADR-005 | Re-implement Semaphore+RLN natively in RISC0 | Pending (P1) |
 | ADR-006 | Moderator key storage: password-encrypted software key | Pending (P7) |
 

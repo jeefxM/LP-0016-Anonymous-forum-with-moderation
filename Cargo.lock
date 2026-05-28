@@ -1882,18 +1882,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "proof-daemon"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "serde",
-]
-
-[[package]]
 name = "proof-host"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bincode",
  "hex",
  "post_proof_core",
  "risc0-zkvm",

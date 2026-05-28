@@ -6,18 +6,19 @@ members = [
     "crates/proof-host",
     "crates/slash-evidence",
     "crates/moderation-cert",
-    "crates/proof-daemon",
 ]
 # RISC0 guest crates (`programs/*/methods/guest`) are NOT workspace members.
 # They're built with `cargo risczero build` from their own manifests because
 # they target the riscv32im-risc0-zkvm-elf triple.
 #
-# crates/lez-runner is also excluded: it path-deps the sibling LEZ workspace
-# checkout (only present on the build host) and pulls in the heavy LEZ build.
+# crates/lez-runner AND crates/proof-daemon are excluded: they path-dep the
+# sibling LEZ workspace checkout (only present on the build host) and pull in
+# the heavy LEZ build. They build on Hetzner, not the Mac (ADR-004).
 exclude = [
     "programs/membership_registry/methods/guest",
     "programs/post_proof/methods/guest",
     "crates/lez-runner",
+    "crates/proof-daemon",
 ]
 
 [workspace.package]

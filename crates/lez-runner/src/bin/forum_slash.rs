@@ -11,28 +11,21 @@
 //!      on-chain revocation set.
 //!
 //! This is the live-chain counterpart to the `slash_submission` /
-//! `post_rejection_after_revocation` tests.
+//! `post_rejection_after_revocation` tests. The chain plumbing lives in the
+//! `lez_runner` library; this bin is a thin demo wrapper.
 //!
 //! Build + run on Hetzner:
 //!   NSSA_WALLET_HOME_DIR=~/lez/wallet/configs/debug \
 //!     cargo run --release --bin forum_slash -- <path-to-membership_registry.bin>
 
-use bincode::Options;
-use common::transaction::NSSATransaction;
+use anyhow::{anyhow, Result};
 use ed25519_dalek::SigningKey;
-use membership_registry_core::{
-    ForumConfig, ForumState, Instruction, MerklePath, TREE_DEPTH,
-};
+use lez_runner::{initialize, load_program, poll_until, register, slash};
+use membership_registry_core::{ForumConfig, MerklePath, TREE_DEPTH};
 use moderation_cert::sign_vote;
-use nssa::{
-    program::Program,
-    public_transaction::{Message, WitnessSet},
-    AccountId, PublicTransaction,
-};
-use nssa_core::program::PdaSeed;
 use post_proof_core::shamir;
 use rand::rngs::OsRng;
-use sequencer_service_rpc::RpcClient as _;
+use sha2::{Digest, Sha256};
 use slash_evidence::build_slash_payload;
 use wallet::WalletCore;
 
@@ -40,66 +33,13 @@ const K: u8 = 3;
 const N: u8 = 2;
 const M: usize = 5;
 
-fn try_decode_state(bytes: &[u8]) -> Option<ForumState> {
-    bincode::DefaultOptions::new()
-        .with_fixint_encoding()
-        .deserialize(bytes)
-        .ok()
-}
-
-async fn submit(
-    wallet_core: &WalletCore,
-    program: &Program,
-    account_id: AccountId,
-    instruction: Instruction,
-    label: &str,
-) {
-    let message = Message::try_new(program.id(), vec![account_id], vec![], instruction)
-        .expect("message construction");
-    let witness_set = WitnessSet::for_message(&message, &[]);
-    let tx = PublicTransaction::new(message, witness_set);
-    let resp = wallet_core
-        .sequencer_client
-        .send_transaction(NSSATransaction::Public(tx))
-        .await
-        .unwrap_or_else(|e| panic!("{label} submit failed: {e}"));
-    println!("  {label} submitted: {resp:?}");
-}
-
-async fn poll_until<F>(
-    wallet_core: &WalletCore,
-    pda: AccountId,
-    label: &str,
-    pred: F,
-) -> ForumState
-where
-    F: Fn(&ForumState) -> bool,
-{
-    for attempt in 1..=25 {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        if let Ok(acct) = wallet_core.get_account_public(pda).await {
-            if let Some(state) = try_decode_state(acct.data.as_ref()) {
-                if pred(&state) {
-                    return state;
-                }
-            }
-        }
-        if attempt % 5 == 0 {
-            println!("  …waiting for {label} (attempt {attempt}/25)");
-        }
-    }
-    panic!("timed out waiting for {label}");
-}
-
 #[tokio::main]
-async fn main() {
-    let wallet_core = WalletCore::from_env().expect("NSSA_WALLET_HOME_DIR set + node reachable");
-    let program_path = std::env::args_os()
+async fn main() -> Result<()> {
+    let wallet_core = WalletCore::from_env().map_err(|e| anyhow!("wallet from_env: {e:?}"))?;
+    let program_path = std::env::args()
         .nth(1)
-        .expect("usage: forum_slash <membership_registry.bin>")
-        .into_string()
-        .unwrap();
-    let program = Program::new(std::fs::read(&program_path).expect("read bin")).expect("program");
+        .ok_or_else(|| anyhow!("usage: forum_slash <membership_registry.bin>"))?;
+    let program = load_program(&program_path)?;
     println!("Program ID: {:?}", program.id());
 
     // Real moderator keypairs.
@@ -116,8 +56,6 @@ async fn main() {
             .as_nanos()
             .to_le_bytes(),
     );
-    let pda = AccountId::for_public_pda(&program.id(), &PdaSeed::new(seed));
-    println!("Registry PDA: {pda}");
 
     // ── 1. Initialize with real moderators ───────────────────────────
     let config = ForumConfig {
@@ -127,8 +65,9 @@ async fn main() {
         stake_amount: 1_000,
     };
     println!("→ Initialize (K={K}, N={N}, M={M})");
-    submit(&wallet_core, &program, pda, Instruction::Initialize { config: config.clone(), seed }, "Initialize").await;
-    let state0 = poll_until(&wallet_core, pda, "Initialize", |s| s.next_leaf_index == 0).await;
+    let (pda, _) = initialize(&wallet_core, &program, seed, config).await?;
+    println!("Registry PDA: {pda}");
+    let state0 = poll_until(&wallet_core, pda, "Initialize", 25, |s| s.next_leaf_index == 0).await?;
 
     // ── 2. Register member A (canonical Fr-encoded secret) ───────────
     let mut secret = [0u8; 32];
@@ -136,15 +75,8 @@ async fn main() {
     let commitment = shamir_commitment(&secret);
     let empty_path: MerklePath = [[0u8; 32]; TREE_DEPTH];
     println!("→ Register member A");
-    submit(
-        &wallet_core,
-        &program,
-        pda,
-        Instruction::Register { commitment, path_before: empty_path, leaf_index: 0 },
-        "Register A",
-    )
-    .await;
-    let state1 = poll_until(&wallet_core, pda, "Register A", |s| s.next_leaf_index == 1).await;
+    register(&wallet_core, &program, pda, commitment, empty_path, 0).await?;
+    let state1 = poll_until(&wallet_core, pda, "Register A", 25, |s| s.next_leaf_index == 1).await?;
     println!("  registered: tree_root={}", hex::encode(state1.tree_root));
     assert_ne!(state1.tree_root, state0.tree_root);
 
@@ -168,37 +100,25 @@ async fn main() {
     println!("→ Built {} certs ({}-of-{} sigs each)", certs.len(), N, M);
 
     // ── 4. Reconstruct secret off-chain + build slash payload ─────────
-    let payload = build_slash_payload(
-        &certs,
-        &mod_pubs,
-        N,
-        K,
-        state1.tree_root,
-        0,
-        empty_path,
-        &[],
-    )
-    .expect("off-chain slash payload assembly");
+    let payload = build_slash_payload(&certs, &mod_pubs, N, K, state1.tree_root, 0, empty_path, &[])
+        .map_err(|e| anyhow!("off-chain slash payload assembly: {e}"))?;
     assert_eq!(payload.commitment, commitment, "reconstructed commitment matches member A");
     println!("  off-chain reconstruction OK, commitment matches");
 
     // ── 5. Submit Slash on-chain ──────────────────────────────────────
     println!("→ Slash");
-    submit(
+    slash(
         &wallet_core,
         &program,
         pda,
-        Instruction::Slash {
-            reconstructed_secret: payload.reconstructed_secret,
-            certificates: payload.certificates,
-            leaf_index: 0,
-            merkle_path: empty_path,
-        },
-        "Slash",
+        payload.reconstructed_secret,
+        payload.certificates,
+        0,
+        empty_path,
     )
-    .await;
+    .await?;
 
-    let state2 = poll_until(&wallet_core, pda, "Slash", |s| !s.revocation_set.is_empty()).await;
+    let state2 = poll_until(&wallet_core, pda, "Slash", 25, |s| !s.revocation_set.is_empty()).await?;
     assert!(
         state2.revocation_set.contains(&commitment),
         "member A's commitment must be in the on-chain revocation set"
@@ -208,13 +128,12 @@ async fn main() {
         "\n✅ Slash e2e on live chain: revocation_set now contains member A's commitment ({} entry)",
         state2.revocation_set.len()
     );
+    Ok(())
 }
 
 /// commitment_of = sha256("commit" || secret). Matches the guest + slash
-/// verifier convention. (Re-derived here to avoid importing the host crate's
-/// private helper.)
+/// verifier convention.
 fn shamir_commitment(secret: &[u8; 32]) -> [u8; 32] {
-    use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
     h.update(b"commit");
     h.update(secret);

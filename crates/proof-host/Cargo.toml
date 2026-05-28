@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 risc0-zkvm = { version = "3.0.5", features = ["std"] }
+bincode = "1"
 post_proof_core = { path = "../../programs/post_proof/core" }
 
 [[bin]]
