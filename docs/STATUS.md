@@ -89,7 +89,33 @@ tree-stateless). Delivered:
     `transport.ts`). Cluster 1 forces RLN (hangs without an eth RPC) — use a
     non-TWN cluster for local tests.
 
-## Immediate next action (P7)
+## ACTIVE: perf gate — membership proof → Groth16 (ADR-010)
+
+The `<10s` bounty criterion is **not** met by the risc0 zkVM membership
+proof (55–65s CPU) and **cannot be**: risc0 3.0.5 has no Metal backend
+(ADR-002 update), and a laptop has no CUDA. The bounty actually points to a
+**Semaphore/RLN circuit** for this proof (it calls it a "circuit"; posts are
+off-chain so the proof is verified off-chain, decoupled from LEZ). So we're
+replacing the risc0 `post_proof` with a **Groth16 circuit** (ADR-010,
+decision 1b: keep the SHA-256 stack, only the off-chain prover/verifier
+changes). The risc0 LEZ register/slash program is unaffected.
+
+Tasks PERF-1..6:
+- ✅ PERF-1 ADR-010 spec (byte-exact preimages + scope guard).
+- 🟡 PERF-2 install circom + SHA-256 alignment pre-flight (circomlib sha256
+  of `"node"‖l‖r` == Rust sha2) — retires the #1 soundness risk.
+- ⬜ PERF-3 membership.circom (commitment, 16-level SHA256 Merkle, nullifier,
+  share_x/coeffs with mod-r, Horner share_y). Per-K (K=2,3).
+- ⬜ PERF-4 ptau + groth16 setup per K.
+- ⬜ PERF-5 build rapidsnark; daemon `/v1/post/prove` → Groth16 (bench <10s).
+- ⬜ PERF-6 SDK `verifyPostProof` → Groth16 verify; byte-level share
+  cross-tests; re-run `lifecycle.mjs`.
+
+Toolchain: snarkjs 11.6.1 present; circom + rapidsnark being installed.
+Estimate ~3–5 days. This is the last hard technical item; everything else
+(P7 app, P8 docs, P9 demo/testnet) is packaging.
+
+## Next after the perf gate (P7)
 
 P6 is complete and live-verified end to end. Next is **P7**: the reference
 Basecamp app (Next.js, `app/`) that imports ONLY `@logos-forum/moderation-sdk`

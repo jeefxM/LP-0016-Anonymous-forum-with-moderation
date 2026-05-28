@@ -17,6 +17,13 @@ risc0-zkvm = { version = "3.0.5", features = ["std"] }
 bincode = "1"
 post_proof_core = { path = "../../programs/post_proof/core" }
 
+[features]
+# Opt-in GPU proving. `metal` (Apple Silicon) is the <10s perf path (ADR-002);
+# `cuda` for NVIDIA. Off by default so the Linux/Hetzner build is unaffected.
+#   cargo run --release --features metal --bin bench_post_proof -- <elf>
+metal = ["risc0-zkvm/metal"]
+cuda = ["risc0-zkvm/cuda"]
+
 [[bin]]
 name = "bench_any_elf"
 path = "src/bin/bench_any_elf.rs"

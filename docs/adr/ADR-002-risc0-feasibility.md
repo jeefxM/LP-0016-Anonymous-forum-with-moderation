@@ -114,12 +114,58 @@ Revised pre-P9 gate: apply optimisation (1), then bench on M-series Metal.
 Target < 10 s. If (1)+Metal still misses, escalate to Bonsai or an
 off-RISC0 circuit per the alternatives above.
 
-## Open follow-ups
+## Update (P6.5+): Metal does not exist in risc0 3.0.5 — the lever is invalid
 
-- **Pre-P9 gate:** re-bench on M-series Metal with optimisations applied.
-  Tracked as task #16.
-- **CI bench:** add a CI job that runs `bench_post_proof` on a known
-  runner and fails if wall time regresses by > 20 %. Useful even before
-  Metal validates the budget, to catch unexpected regressions.
-- **TREE_DEPTH 16 → 12.** Probably not worth the work if Metal closes the
-  gap. Park as a contingency.
+Ran `bench_post_proof` on an Apple M2 (macOS) with the `metal` feature on,
+`RISC0_DEV_MODE=0`: **65.77 s**, 1 segment (2^19), 225 916 user cycles —
+*slower* than the Hetzner Xeon CPU (54.87 s). Metal did not engage.
+
+Root cause (primary source, `risc0-circuit-rv32im 4.0.4`):
+`prove/hal/` contains only `cpu.rs` and `cuda.rs` — **there is no
+`metal.rs`**, and `segment_prover()` has the Metal branch commented out:
+
+```rust
+pub fn segment_prover() -> Result<Box<dyn SegmentProver>> {
+    if #[cfg(feature = "cuda")] { hal::cuda::segment_prover() }
+    else { /* hal::metal::segment_prover() */ hal::cpu::segment_prover() }
+}
+```
+
+`risc0-zkvm`'s `metal = ["prove"]` feature is a no-op alias: it enables the
+CPU prover, nothing GPU. The Metal HAL was removed in the risc0 3.x prover
+rewrite; **the only GPU backend in 3.0.5 is CUDA (NVIDIA)**. Latest crates.io
+is `risc0-circuit-rv32im 5.0.0-rc.1`; even if it restored Metal, a risc0
+major bump is coupled to the LEZ sequencer (ADR-007 pins risc0 3.0.5 via
+`nssa_core`; receipt verification + ImageIDs are version-bound), so we can't
+adopt it unilaterally.
+
+**Consequence: the original decision's central lever ("Metal closes the
+gap") is invalid.** CPU on a standard laptop is ~30–65 s for this guest and
+no cycle-trim / po2 trick gets that to < 10 s — zkVM STARK proving is
+fundamentally tens of seconds on CPU. The realistic paths to < 10 s:
+
+1. **CUDA daemon** — run the proof-daemon on an NVIDIA-GPU host (the SDK
+   still runs on a standard laptop; "localhost" for the daemon is wherever
+   the user provisions it). Preserves the secret-stays-local model (it goes
+   to *their* daemon). Bounty wording ("on a standard laptop") is ambiguous
+   about prover vs SDK host — **needs Logos-team clarification.** Requires a
+   CUDA box for the P9 demo (Hetzner has no GPU).
+2. **Off-RISC0 bespoke circuit** (Groth16/Halo2) — small enough to prove
+   client-side in < 1 s, but the LEZ verifier expects risc0 receipts, so this
+   also breaks chain integration unless LEZ verifies Groth16. Multi-week;
+   out of scope.
+3. **Bonsai** — ruled out: the witness includes the identity secret, so it
+   would leave localhost. Violates the anonymity model.
+4. **Ship CPU honestly** — document ~30–65 s, miss this one criterion, lean
+   on the rest of the (complete, verified) deliverable.
+
+**Decision pending (user + Logos).** Everything except this criterion is
+built and end-to-end verified, so this is a negotiating position, not a
+blocker. Tracked as task #16.
+
+## Open follow-ups (superseded by the update above)
+
+- ~~Pre-P9 gate: re-bench on M-series Metal~~ — done; Metal is unavailable.
+- **CI bench:** still useful to catch CPU-time regressions.
+- **TREE_DEPTH 16 → 12 / cycle trims** — only meaningful margin if we go
+  CUDA and still want headroom; does not change the CPU verdict.
