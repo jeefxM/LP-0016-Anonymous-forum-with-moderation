@@ -30,12 +30,12 @@ novel is done; the rest is packaging with no remaining crypto unknowns.
 | P5 Slash pipeline | ✅ done; **Slash live on-chain** |
 | P5.6 on-chain verify_slash (ADR-008) | ✅ done; ark-bn254+ed25519 run inside the zkVM |
 | P5.2 post_proof emits real Shamir share | ✅ done |
-| **P6 SDK + Waku** | 🟡 in progress |
+| **P6 SDK + Waku** | ✅ done |
 | ↳ P6.1 SDK public API surface | ✅ done (`sdk/src/{types,index}.ts`, typechecks) |
 | ↳ P6.2 proof-daemon (Rust HTTP) | ✅ done; **11/12 endpoints smoke-verified on live chain (dev + real mode); slash/submit library-verified** |
 | ↳ P6.3 SDK client → daemon | ✅ done; **full lifecycle verified live via SDK imports** |
 | ↳ P6.4 Waku transport (js-waku) | ✅ done; **live round-trip verified against nwaku** |
-| ↳ P6.5 SDK smoke test | 🟡 chain+proof lifecycle (integration.mjs) + Waku round-trip (waku-integration.mjs) both green; a single combined run is the remaining nicety |
+| ↳ P6.5 SDK smoke test | ✅ done; **full lifecycle (register→post→moderate→slash→revoke) green via SDK imports against daemon + nwaku + chain** (`sdk/tests/lifecycle.mjs`) |
 | P7 Reference Basecamp app | ⬜ not started |
 | P8 Docs + IDL (SPEL) | ⬜ not started |
 | P9 Demo + testnet deploy + video | ⬜ not started |
@@ -89,7 +89,17 @@ tree-stateless). Delivered:
     `transport.ts`). Cluster 1 forces RLN (hangs without an eth RPC) — use a
     non-TWN cluster for local tests.
 
-## Immediate next action (P6.4 finish, then P7)
+## Immediate next action (P7)
+
+P6 is complete and live-verified end to end. Next is **P7**: the reference
+Basecamp app (Next.js, `app/`) that imports ONLY `@logos-forum/moderation-sdk`
+— register/post/moderate/view, plus the Waku Store-window banner (ADR-001).
+`sdk/tests/lifecycle.mjs` is the working reference for the full SDK flow.
+Then P8 (docs incl. the required `protocol.md` + IDL) and P9 (demo + two live
+instances + video). Note `app/` still has no tsconfig — root `tsc -b` won't
+pass until P7 scaffolds it.
+
+### P6.4 reference (Waku transport)
 
 P6.2 + P6.3 are done (see below). Build the Waku transport (`sdk/src`, pure
 TS via js-waku): publish/subscribe post envelopes + moderation certificates,
