@@ -26,6 +26,31 @@ This is the live-chain proof of `valid_registration`: the guest's Merkle
 insertion executed on-chain exactly as the host-side `simulate_register`
 unit test predicted. Transaction hashes are in `~/seq.log`.
 
+### Live Slash end-to-end (2026-05-28)
+
+The `forum_slash` runner drove the complete revocation lifecycle against
+the live sequencer, using the slash-enabled guest (ImageID
+`6eca79ea50971688befcec8933459ce1776ae16e01906d7d6227c58fafd9e9c5`):
+
+```
+Initialize (K=3, N=2, M=5 real Ed25519 moderators)
+Register member A
+Built 3 certs (2-of-5 sigs each) over real Shamir shares
+off-chain reconstruction OK, commitment matches
+Slash submitted → executed on-chain
+✅ revocation_set contains member A's commitment
+```
+
+This proves the on-chain `verify_slash` — **ark-bn254 poly_eval +
+Ed25519 signature verification running inside the RISC0 zkVM** — executes
+correctly on a real chain: it verified 3 cert signatures, confirmed each
+`share_x == H(secret, content_id)` and `share_y == poly_eval(coeffs,
+share_x)` (the ADR-008 binding), verified the commitment is in the tree,
+and wrote it to the revocation set.
+
+The full protocol lifecycle — register → post → moderate → slash →
+revoke — now runs end-to-end on-chain.
+
 ### membership_registry guest
 
 - ELF: `~/forum-protocol/programs/membership_registry/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/membership_registry.bin`

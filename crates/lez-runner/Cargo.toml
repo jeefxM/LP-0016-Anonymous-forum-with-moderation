@@ -17,10 +17,20 @@ description = "Host-side runner: submits Register + Slash transactions to a LEZ 
 name = "forum_register"
 path = "src/bin/forum_register.rs"
 
+[[bin]]
+name = "forum_slash"
+path = "src/bin/forum_slash.rs"
+
 [dependencies]
 membership_registry_core = { path = "../../programs/membership_registry/core" }
+moderation-cert = { path = "../moderation-cert" }
+slash-evidence = { path = "../slash-evidence" }
+post_proof_core = { path = "../../programs/post_proof/core" }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
 bincode = "1"
 hex = "0.4"
+sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 # LEZ workspace crates — sibling checkout at ../../../lez on the build host.
