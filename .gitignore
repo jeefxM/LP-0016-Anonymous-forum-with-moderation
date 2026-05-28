@@ -13,6 +13,7 @@ node_modules/
 .pnpm-store/
 *.log
 *.tsbuildinfo
+dist/
 
 # Next.js (under app/)
 app/.next/

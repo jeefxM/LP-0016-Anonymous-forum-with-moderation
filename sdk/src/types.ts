@@ -108,6 +108,7 @@ export class ForumError extends Error {
 
 export type ForumErrorKind =
 	| "daemon_unreachable" // local proof daemon not running
+	| "bad_request" // malformed input rejected by the daemon
 	| "proof_failed" // RISC0 proof generation failed (retryable)
 	| "invalid_proof" // a post envelope failed verification
 	| "revoked" // member is in the revocation set

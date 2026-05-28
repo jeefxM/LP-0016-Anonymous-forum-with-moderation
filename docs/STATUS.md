@@ -32,10 +32,10 @@ novel is done; the rest is packaging with no remaining crypto unknowns.
 | P5.2 post_proof emits real Shamir share | ✅ done |
 | **P6 SDK + Waku** | 🟡 in progress |
 | ↳ P6.1 SDK public API surface | ✅ done (`sdk/src/{types,index}.ts`, typechecks) |
-| ↳ P6.2 proof-daemon (Rust HTTP) | ⬜ **NEXT** |
-| ↳ P6.3 SDK client → daemon | ⬜ |
-| ↳ P6.4 Waku transport (js-waku) | ⬜ delegatable (pure TS, contract = types.ts) |
-| ↳ P6.5 SDK smoke test | ⬜ |
+| ↳ P6.2 proof-daemon (Rust HTTP) | ✅ done; **11/12 endpoints smoke-verified on live chain (dev + real mode); slash/submit library-verified** |
+| ↳ P6.3 SDK client → daemon | ✅ done; **full lifecycle verified live via SDK imports** |
+| ↳ P6.4 Waku transport (js-waku) | ⬜ **NEXT** (pure TS, contract = types.ts) |
+| ↳ P6.5 SDK smoke test | 🟡 largely covered by `sdk/tests/integration.mjs`; finish once Waku lands |
 | P7 Reference Basecamp app | ⬜ not started |
 | P8 Docs + IDL (SPEL) | ⬜ not started |
 | P9 Demo + testnet deploy + video | ⬜ not started |
@@ -53,25 +53,95 @@ Bounty-named tests: 6 of 7 at logic layer (`valid_registration`,
 satisfied by `bench_post_proof` (real receipt verifies) but not yet a
 named `#[test]` — see loose ends.
 
-## Immediate next action (P6.2)
+## Immediate next action (P6.4)
 
-Build `crates/proof-daemon` — an axum localhost HTTP server wrapping the
-proven crates. Architecture per ADR-004: SDK is a thin client; the daemon
-does all ZK proving + LEZ submission (secret never leaves localhost);
-js-waku does transport. Endpoints map 1:1 to the SDK API in
-`sdk/src/index.ts`:
+P6.2 + P6.3 are done (see below). Build the Waku transport (`sdk/src`, pure
+TS via js-waku): publish/subscribe post envelopes + moderation certificates,
+and feed the SDK's `MerkleTree` (config.tree) from the commitments seen on
+Waku so multi-member trees stay in sync (today the SDK only appends its own
+registrations). This unblocks the three Waku-stubbed SDK functions
+(`publishCertificate`, `listCertificatesForMember`, and therefore
+`tryReconstructSlashEvidence`). Contract = `sdk/src/types.ts`.
 
-- pure crypto (Mac-buildable): sign_vote, aggregate_cert, verify_cert
-  (moderation-cert); reconstruct_slash (slash-evidence)
-- proving (Hetzner only — needs RISC0 prover + guest ELF): prove_post,
-  verify_post (post_proof_core + proof-host)
-- chain (Hetzner only — needs WalletCore): register, submit_slash,
-  load_instance (reuse lez-runner patterns)
+### P6.3 as built (SDK client)
 
-The daemon, like lez-runner, path-deps the LEZ sibling checkout and is
-**excluded from the Mac workspace** (root `Cargo.toml` exclude list).
+`sdk/src/` now implements the P6.1 surface for real:
+- `tree.ts` — `MerkleTree` (depth 16, commitment-as-leaf, vendored sync
+  SHA-256). Matches Rust `fold_path` exactly; the empty root equals the
+  live-chain `empty_tree_root` (34fc..431d44) — asserted in tests.
+- `client.ts` — `daemonPost` with daemon `{kind,message}` → typed
+  `ForumError` mapping (+ `daemon_unreachable` on network failure).
+- `index.ts` — all functions wired to the daemon. `register` /
+  `createPostProof` derive Merkle paths from `config.tree` (ADR-004) and
+  guard that `tree.root() === forum.treeRoot`. The 3 Waku-dependent
+  functions throw `transport_error` pointing at P6.4.
+
+Verification: 14 vitest unit tests (tree vectors + client error mapping);
+`tsc -p tsconfig.json` clean; and `sdk/tests/integration.mjs` drives the
+full register → post → verify → moderate flow through SDK imports against
+the live daemon (SSH-tunnel localhost:8787 → Hetzner) — all green.
+
+ESM note: relative imports in `sdk/src` use explicit `.js` extensions so the
+emitted `dist/` runs under Node ESM (`"type": "module"`).
+
+### P6.2 as built (proof-daemon)
+
+`crates/proof-daemon` is an axum localhost server (default 127.0.0.1:8787),
+excluded from the Mac workspace, built on Hetzner. ADR-004 governs it. It
+holds no tree state; callers pass Merkle paths; it re-queries the PDA per
+call. Endpoint → SDK-function map (all POST, JSON; 32/64-byte fields hex,
+receipt base64, u128 as decimal string):
+
+- pure crypto: `/v1/identity/create`, `/v1/moderation/sign`,
+  `/v1/moderation/aggregate`
+- chain: `/v1/forum/create`, `/v1/forum/load`, `/v1/member/register`,
+  `/v1/member/is-revoked`, `/v1/slash/reconstruct`, `/v1/slash/submit`
+- proving: `/v1/post/prove`, `/v1/post/verify`
+- `/v1/health`
+
+`publishCertificate` / `listCertificatesForMember` are deliberately NOT in
+the daemon — they're Waku (P6.4). Chain helpers were extracted into
+`crates/lez-runner/src/lib.rs` (the two runner bins are now thin wrappers).
+Proving helpers are in `crates/proof-host/src/lib.rs`. Smoke script:
+`crates/proof-daemon/smoke.sh` (needs `jq`).
+
+Run on Hetzner:
+```
+NSSA_WALLET_HOME_DIR=~/lez/wallet/configs/debug \
+MEMBERSHIP_REGISTRY_BIN=~/forum-protocol/programs/membership_registry/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/membership_registry.bin \
+POST_PROOF_BIN=~/forum-protocol/programs/post_proof/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/post_proof.bin \
+RISC0_DEV_MODE=1 ./target/debug/proof-daemon
+```
 
 ## Loose ends / backlog (these were tracked as in-session tasks)
+
+- **P6.2 follow-ups (new):**
+  - **`verifyPostProof` cannot check revocation.** A post envelope is
+    anonymous (nullifier + shares, no commitment), so the daemon's
+    `/v1/post/verify` checks only: receipt valid + committed root == claimed
+    root == current on-chain root. Revocation enforcement at post time
+    needs root rotation or a non-membership proof — a real protocol
+    decision for `docs/protocol.md` (P8). The SDK doc comment in
+    `sdk/src/index.ts` still claims a revoked check; reconcile it in P8.
+  - **`txHash` is `format!("{:?}")` of the sequencer's `HashType`** (in
+    `lez-runner::submit`). Works as an opaque id; if a canonical hex hash is
+    wanted, find HashType's Display/hex impl and use it.
+  - **`createForum` polls `|_| true`** (returns first decodable state). On
+    an already-initialised PDA it returns current state rather than erroring
+    — acceptable for v1, revisit if create-idempotency matters.
+  - **Daemon wallet unlock is boot-time env only** (NSSA_WALLET_HOME_DIR).
+    An `/unlock` endpoint is a P6.5/P7 item (ADR-006).
+  - **`jq` is now a smoke-test dependency** (installed on Hetzner). Note for
+    CI / a fresh box. `smoke.sh` pipes bodies via stdin (`--data-binary @-`)
+    because real-mode receipts (multi-MB) overflow a curl `-d` arg / ARG_MAX.
+  - **`/v1/slash/submit` is verified at the library layer** (via the
+    `forum_slash` runner bin) but its HTTP path (DTO→`to_wire`→submit→poll)
+    was not exercised end-to-end in the smoke. Low risk (only the DTO
+    conversion is new), but exercise it when P6.5 does the full SDK lifecycle.
+  - **Verified:** 11 of 12 endpoints smoke-passed on the live chain in both
+    `RISC0_DEV_MODE=1` and `=0`; real-mode prove (~55s) → verify round-trips
+    a multi-MB receipt OK after raising axum's body limit to 16 MB.
+
 
 - **#43 Pre-P9: trim post_proof to one RISC0 segment.** Real Shamir pushed
   it to 2 segments (524288 cycles, 54.87s on Hetzner CPU). Trim ~30k user
