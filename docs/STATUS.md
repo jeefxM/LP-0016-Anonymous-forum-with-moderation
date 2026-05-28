@@ -106,9 +106,11 @@ Tasks PERF-1..6:
   over `"node"‖l‖r` is bit-identical to Rust sha2 (MSB-first bit order, 2-block
   preimage confirmed). One node hash ≈ 62k constraints → full circuit ~1M →
   rapidsnark required. See `circuits/preflight_*`.
-- ⬜ PERF-3 membership.circom (commitment, 16-level SHA256 Merkle, nullifier,
-  share_x/coeffs with mod-r, Horner share_y). Per-K (K=2,3).
-- ⬜ PERF-4 ptau + groth16 setup per K.
+- ✅ PERF-3 `circuits/membership.circom` — **1.14M constraints, outputs match
+  Rust byte-for-byte** (nullifier/shareX/shareY via `circuit_oracle` +
+  `validate.mjs`; Merkle-root constraint satisfied; mod-r field-LC trick
+  confirmed). Compiled K=3.
+- ⬜ PERF-4 ptau (2^21) + groth16 setup per K.
 - ⬜ PERF-5 build rapidsnark; daemon `/v1/post/prove` → Groth16 (bench <10s).
 - ⬜ PERF-6 SDK `verifyPostProof` → Groth16 verify; byte-level share
   cross-tests; re-run `lifecycle.mjs`.
