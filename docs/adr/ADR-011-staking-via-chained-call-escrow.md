@@ -88,13 +88,12 @@ is purely an economic layer on register/slash.
   the escrow PDA must be claimed at `Initialize`.
 - Requires a guest rebuild + redeploy (new ImageID) and live e2e iteration —
   this is the slow part; the choreography below is the design under test.
-- **To confirm during build** (each needs a live run): that
-  `authenticated_transfer.Transfer` accepts a non-`authenticated_transfer`-owned
-  recipient (the registry escrow) for the credit; that crediting the escrow
-  leaves its `program_owner` as the registry (so slash's direct debit is
-  legal); the exact account ordering/authorization flags for the chained call.
-  If a credit can't target a foreign-owned account, fall back to the
-  escrow-is-a-vault variant (CPI both ways).
+- **Confirmed during build** (all via the `valid_staking_lifecycle` V03State
+  e2e — see below): `authenticated_transfer.Transfer` credits a
+  non-`authenticated_transfer`-owned recipient (the registry escrow) and
+  **preserves its `program_owner` as the registry** (the
+  `else { AccountPostState::new(..) }` branch in the auth-transfer guest), so
+  slash's direct debit is legal. The escrow-is-a-vault fallback is not needed.
 
 ## Funding path (resolved from the faucet/vault/auth-transfer guests)
 
@@ -116,4 +115,46 @@ balance onto the registry-owned escrow PDA is a fixed chain:
 `send_public_transfer` already exists; `vault.Claim` has no wallet facade and is
 built manually in `lez-runner` (Message + WitnessSet + the account's nonce +
 its signing key). The runner reshape (multi-account `initialize`/`register`/
-`slash` + these funding steps) + live e2e is the remaining work.
+`slash` + these funding steps) is implemented in `crates/lez-runner`.
+
+## Build outcome (verified)
+
+The reshape and the value model are confirmed; the verification venue changed
+based on three findings from the live single-node sequencer:
+
+1. **The guest needs an explicit deploy.** `Initialize` only executes after a
+   `deploy-program` tx registers the guest bytecode with the sequencer (the
+   `get_program_ids` set is genesis-only; custom programs must be deployed). It
+   is not implicit in the runner's `load_program`. With the guest deployed,
+   `Initialize` executes live and claims the registry-owned escrow PDA
+   (verified: escrow `program_owner` = registry, balance 0).
+2. **The faucet is genesis-only.** User transactions that invoke the faucet are
+   *dropped* by design — LEZ's own `cannot_execute_faucet_program` /
+   `user_tx_that_chain_calls_faucet_is_dropped` integration tests assert this.
+   So the faucet→vault funding chain above is **not usable at runtime**; native
+   funds only enter via genesis (config `supply_account` entries) or, on a
+   public testnet, whatever faucet that deployment exposes. On the local
+   single-node chain the wallet account and genesis supply accounts are
+   unfunded, so there is no runtime funding path.
+3. **The slasher must be an existing account.** Crediting a fresh
+   default-owned account without a claim is rejected
+   (`DefaultAccountModifiedWithoutClaim`), and the slasher does not sign the
+   no-auth `Slash` tx so it cannot self-claim. The slasher is therefore a real
+   participant (moderator/treasury) whose account already exists. (A future
+   guest revision could claim a default-owned slasher the way auth-transfer
+   claims a default recipient; deferred — it pairs with the next guest rebuild.)
+
+**Verification venue.** Because runtime funding is impossible on the local
+single-node chain, the faithful e2e runs **in process via `nssa::V03State`**
+(`crates/lez-runner/tests/staking_lifecycle.rs`), which executes the deployed
+guest through the same risc0 engine the sequencer uses and lets us seed a
+funded member directly at genesis (what a real testnet faucet would do). It is
+more rigorous than a flaky live run: deterministic, fast, CI-able. It asserts
+the escrow is claimed by the registry, funded by a member-signed
+`authenticated_transfer` (owner preserved), the register stake-check passes,
+and slash drains the escrow to the slasher while revoking the member.
+
+A genuine public-testnet run (`https://testnet.lez.logos.co`) is a follow-up:
+the testnet runs a **different LEZ version** (its system-program ids differ
+from rev `8c8f5b57`), so it needs the guest + runner rebuilt against the
+testnet's rev and a testnet-level funding source — both currently unknown.

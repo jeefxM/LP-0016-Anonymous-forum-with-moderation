@@ -137,34 +137,45 @@ risc0 `post_proof` guest is now legacy (kept for history; off the live path).
 This was the last hard technical item; everything else (P7 app, P8 docs,
 P9 demo/testnet) is packaging.
 
-## Staking (ADR-011) — in progress
+## Staking (ADR-011) — done (verified via V03State e2e)
 
-Closing the "register with a stake" / slash "claims the stake" gap.
+"Register with a stake" / slash "claims the stake" is implemented and proven
+end-to-end against the LEZ execution engine.
 
-- ✅ Design: **ADR-011** (registry-owned escrow PDA; Register chains
-  `authenticated_transfer.Transfer(member → escrow)` / member funds it first;
-  Slash direct-debits `escrow → slasher` since the registry owns the escrow).
+- ✅ Design: **ADR-011** (registry-owned escrow PDA; member funds it via
+  `authenticated_transfer.Transfer(member → escrow)`; Slash direct-debits
+  `escrow → slasher` since the registry owns the escrow).
 - ✅ Core primitives: `staking::{AuthTransferInstruction, escrow_seed}` in
   `membership_registry_core` (vendored enum, tested).
 - ✅ Guest: `Initialize` claims the escrow PDA, `Register` requires the escrow
-  to hold `stake_amount` per member (rejects a substituted escrow by deriving
-  its PDA), `Slash` pays `stake_amount` to the slasher. **Built + validated in
-  the risc0 docker builder** → new **ImageID
-  `7c4caee9cb41073b0bae27c5fce0cf74a42136604a01da07051066dfb5769259`** (not
-  yet deployed/wired). Supersedes the old `6eca79ea…` registry ImageID.
-- ⬜ Remaining (the slow live stretch):
-  - **Funding**: a member moves `stake_amount` native into the escrow before
-    register. `WalletCore` has `NativeTokenTransfer::send_public_transfer`
-    (authenticated_transfer), but it spends the account's **direct** balance —
-    and genesis funds supply accounts into their **vaults**. Open question:
-    does the daemon wallet hold direct balance, or must it `vault.Claim` first
-    (no wallet facade for Claim — would be built manually)? Resolve before
-    wiring the runner.
-  - **lez-runner**: `initialize`/`register`/`slash` reshaped to pass the escrow
-    (+ slasher) accounts; add the funding step.
-  - **daemon DTOs/handlers + SDK** to thread the accounts through.
-  - **live e2e**: register-locks-stake → slash-claims-stake, confirming the
-    three "confirm during build" items in ADR-011.
+  to hold `stake_amount` per member (rejects a substituted escrow), `Slash`
+  pays `stake_amount` to the slasher. **ImageID
+  `7c4caee9cb41073b0bae27c5fce0cf74a42136604a01da07051066dfb5769259`**.
+  Supersedes the old `6eca79ea…` registry ImageID.
+- ✅ `lez-runner`: `initialize`/`register`/`slash` reshaped to multi-account
+  (state + escrow + slasher); generalized signed/no-auth submit; standalone
+  funding helpers. **Initialize verified live** on the Hetzner sequencer
+  (escrow PDA claimed by the registry) after a `deploy-program` tx.
+- ✅ **e2e proof**: `crates/lez-runner/tests/staking_lifecycle.rs`
+  (`valid_staking_lifecycle`) runs the full path in-process via `nssa::V03State`
+  (real risc0 execution of the deployed guest): Initialize → member-signed
+  stake into escrow (owner preserved = registry) → Register stake-check →
+  K strikes → Slash drains escrow to slasher + revokes member. Run with
+  `RISC0_DEV_MODE=1 cargo test --release --test staking_lifecycle`.
+
+Findings that shaped this (see ADR-011 "Build outcome"):
+- The guest needs an explicit `deploy-program` tx; it is not implicit.
+- **The LEZ faucet is genesis-only** (user faucet txs are dropped by design —
+  LEZ's `cannot_execute_faucet_program` test), so there is no runtime funding
+  on the local single-node chain → the e2e is the in-process V03State test.
+- The slasher must be an existing (non-default) account.
+
+⬜ Follow-ups (not blocking the staking proof):
+- **daemon DTOs/handlers + SDK** to thread escrow/slasher/funding so the app
+  path stakes too (lower priority).
+- **public testnet run** at `https://testnet.lez.logos.co` — runs a *different*
+  LEZ version (system-program ids differ from rev `8c8f5b57`), so needs the
+  guest + runner rebuilt against the testnet rev and a testnet funding source.
 
 ## Next after the perf gate (P7)
 
