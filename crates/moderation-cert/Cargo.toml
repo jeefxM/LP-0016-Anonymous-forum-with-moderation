@@ -12,3 +12,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 ed25519-dalek = { workspace = true }
 sha2 = { workspace = true }
+membership_registry_core = { path = "../../programs/membership_registry/core" }
+
+[dev-dependencies]
+rand = { workspace = true }
