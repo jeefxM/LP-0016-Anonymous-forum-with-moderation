@@ -13,7 +13,7 @@
 //!     cargo run --release --bin forum_register -- <path-to-membership_registry.bin>
 
 use anyhow::{anyhow, Result};
-use lez_runner::{initialize, load_program, poll_until, register};
+use lez_runner::{fund_escrow, initialize, load_program, poll_until, register};
 use membership_registry_core::{ForumConfig, MerklePath, TREE_DEPTH};
 use wallet::WalletCore;
 
@@ -44,9 +44,11 @@ async fn main() -> Result<()> {
         moderators: vec![[1u8; 32], [2u8; 32], [3u8; 32]],
         stake_amount: 1_000,
     };
+    let stake = config.stake_amount;
     println!("→ Initialize");
-    let (pda, _) = initialize(&wallet_core, &program, seed, config).await?;
+    let (pda, escrow, _) = initialize(&wallet_core, &program, seed, config).await?;
     println!("Registry PDA: {pda}");
+    println!("Escrow PDA:   {escrow}");
 
     let state0 = poll_until(&wallet_core, pda, "Initialize", 20, |s| s.next_leaf_index == 0).await?;
     println!(
@@ -55,11 +57,15 @@ async fn main() -> Result<()> {
         hex::encode(state0.tree_root)
     );
 
-    // ── 2. Register member A at leaf 0 (empty tree → zero sibling path) ─
+    // ── 2. Fund the escrow so Register's stake check passes (ADR-011) ──
+    println!("→ Fund escrow with stake {stake}");
+    fund_escrow(&wallet_core, escrow, stake).await?;
+
+    // ── 3. Register member A at leaf 0 (empty tree → zero sibling path) ─
     let empty_path: MerklePath = [[0u8; 32]; TREE_DEPTH];
     let commitment_a = [0xAAu8; 32];
     println!("→ Register member A (leaf 0)");
-    register(&wallet_core, &program, pda, commitment_a, empty_path, 0).await?;
+    register(&wallet_core, &program, pda, escrow, commitment_a, empty_path, 0).await?;
 
     let state1 = poll_until(&wallet_core, pda, "Register A", 20, |s| s.next_leaf_index >= 1).await?;
     println!(

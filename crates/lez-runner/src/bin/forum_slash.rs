@@ -20,7 +20,9 @@
 
 use anyhow::{anyhow, Result};
 use ed25519_dalek::SigningKey;
-use lez_runner::{initialize, load_program, poll_until, register, slash};
+use lez_runner::{
+    balance_of, fund_escrow, initialize, load_program, poll_until, random_keypair, register, slash,
+};
 use membership_registry_core::{ForumConfig, MerklePath, TREE_DEPTH};
 use moderation_cert::sign_vote;
 use post_proof_core::shamir;
@@ -64,10 +66,16 @@ async fn main() -> Result<()> {
         moderators: mod_pubs.clone(),
         stake_amount: 1_000,
     };
+    let stake = config.stake_amount;
     println!("→ Initialize (K={K}, N={N}, M={M})");
-    let (pda, _) = initialize(&wallet_core, &program, seed, config).await?;
+    let (pda, escrow, _) = initialize(&wallet_core, &program, seed, config).await?;
     println!("Registry PDA: {pda}");
+    println!("Escrow PDA:   {escrow}");
     let state0 = poll_until(&wallet_core, pda, "Initialize", 25, |s| s.next_leaf_index == 0).await?;
+
+    // Stake into the escrow so Register's stake check passes (ADR-011).
+    println!("→ Fund escrow with stake {stake}");
+    fund_escrow(&wallet_core, escrow, stake).await?;
 
     // ── 2. Register member A (canonical Fr-encoded secret) ───────────
     let mut secret = [0u8; 32];
@@ -75,7 +83,7 @@ async fn main() -> Result<()> {
     let commitment = shamir_commitment(&secret);
     let empty_path: MerklePath = [[0u8; 32]; TREE_DEPTH];
     println!("→ Register member A");
-    register(&wallet_core, &program, pda, commitment, empty_path, 0).await?;
+    register(&wallet_core, &program, pda, escrow, commitment, empty_path, 0).await?;
     let state1 = poll_until(&wallet_core, pda, "Register A", 25, |s| s.next_leaf_index == 1).await?;
     println!("  registered: tree_root={}", hex::encode(state1.tree_root));
     assert_ne!(state1.tree_root, state0.tree_root);
@@ -105,12 +113,16 @@ async fn main() -> Result<()> {
     assert_eq!(payload.commitment, commitment, "reconstructed commitment matches member A");
     println!("  off-chain reconstruction OK, commitment matches");
 
-    // ── 5. Submit Slash on-chain ──────────────────────────────────────
-    println!("→ Slash");
+    // ── 5. Submit Slash on-chain (pays the stake to the slasher) ───────
+    let (_slasher_sk, slasher) = random_keypair();
+    let slasher_before = balance_of(&wallet_core, slasher).await;
+    println!("→ Slash (slasher {slasher})");
     slash(
         &wallet_core,
         &program,
         pda,
+        escrow,
+        slasher,
         payload.reconstructed_secret,
         payload.certificates,
         0,
@@ -124,8 +136,16 @@ async fn main() -> Result<()> {
         "member A's commitment must be in the on-chain revocation set"
     );
 
+    let slasher_after = balance_of(&wallet_core, slasher).await;
+    assert_eq!(
+        slasher_after,
+        slasher_before + stake,
+        "slasher must receive the staked amount from the escrow"
+    );
+
     println!(
-        "\n✅ Slash e2e on live chain: revocation_set now contains member A's commitment ({} entry)",
+        "\n✅ Slash e2e on live chain: revocation_set has member A's commitment ({} entry); \
+         slasher balance {slasher_before} → {slasher_after} (+{stake} from escrow)",
         state2.revocation_set.len()
     );
     Ok(())

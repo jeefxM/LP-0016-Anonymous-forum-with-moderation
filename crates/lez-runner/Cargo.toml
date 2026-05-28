@@ -21,6 +21,14 @@ path = "src/bin/forum_register.rs"
 name = "forum_slash"
 path = "src/bin/forum_slash.rs"
 
+[[bin]]
+name = "forum_stake_probe"
+path = "src/bin/forum_stake_probe.rs"
+
+[[bin]]
+name = "forum_stake"
+path = "src/bin/forum_stake.rs"
+
 [dependencies]
 membership_registry_core = { path = "../../programs/membership_registry/core" }
 moderation-cert = { path = "../moderation-cert" }
@@ -32,6 +40,7 @@ anyhow = "1"
 bincode = "1"
 hex = "0.4"
 sha2 = "0.10"
+serde = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 # LEZ workspace crates — sibling checkout at ../../../lez on the build host.
@@ -40,3 +49,7 @@ nssa = { path = "../../../lez/nssa" }
 nssa_core = { path = "../../../lez/nssa/core" }
 wallet = { path = "../../../lez/wallet" }
 sequencer_service_rpc = { path = "../../../lez/sequencer/service/rpc", features = ["client"] }
+# LEZ system-program cores — for the staking funding chain (ADR-011).
+faucet_core = { path = "../../../lez/programs/faucet/core" }
+vault_core = { path = "../../../lez/programs/vault/core" }
+authenticated_transfer_core = { path = "../../../lez/programs/authenticated_transfer/core" }
