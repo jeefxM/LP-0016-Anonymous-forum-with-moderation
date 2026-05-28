@@ -8,6 +8,9 @@
 
 extern crate alloc;
 
+pub mod shamir;
+pub mod slash;
+
 use alloc::vec::Vec;
 use serde::{Deserialize, Serialize};
 
@@ -63,14 +66,17 @@ pub enum Instruction {
     },
 
     /// Slash a member who has accumulated K moderation certificates.
-    /// P2 ships this as a stub that panics; real verification lands in P5.
+    /// Verification logic lives in [`slash::verify_slash`] (ADR-008).
     Slash {
-        commitment: Commitment,
-        /// Reconstructed nullifier secret. Verified against the
-        /// commitment in P5.
+        /// Off-chain-reconstructed identity secret. Bound to the certs'
+        /// shares by the on-chain verifier — a forged value is rejected.
         reconstructed_secret: [u8; 32],
-        /// Accumulated certificates (≥ K). Verified in P5.
+        /// Accumulated certificates (≥ K), each carrying a signed share.
         certificates: Vec<ModerationCertificateWire>,
+        /// Leaf index of the member's commitment in the tree.
+        leaf_index: u32,
+        /// Merkle path proving the commitment is in `tree_root`.
+        merkle_path: MerklePath,
     },
 }
 
@@ -122,8 +128,13 @@ impl ForumState {
 
 /// Wire format for a moderation certificate as it crosses the LEZ
 /// instruction boundary. The off-chain library (`crates/moderation-cert`)
-/// owns the richer in-memory form; this is the minimum the slash verifier
-/// needs in P5.
+/// owns the richer in-memory form.
+///
+/// The Shamir share `(share_x, share_y)` of the flagged post is bound into
+/// the certificate and signed over by the moderators. This lets the
+/// on-chain slash verifier confirm — via `poly_eval` — that the submitted
+/// secret actually produced this share, without trusting the slasher's
+/// off-chain Lagrange reconstruction. See ADR-008.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModerationCertificateWire {
     /// Hash of the moderated content. Forum-app-defined.
@@ -131,7 +142,12 @@ pub struct ModerationCertificateWire {
     /// Index of the strike (0..K). Each member's K certificates must
     /// have distinct indices.
     pub strike_index: u8,
-    /// Moderator signatures over `H(content_id || strike_index)`.
+    /// Shamir share x-coordinate from the flagged post (Fr, 32-byte LE).
+    pub share_x: Hash,
+    /// Shamir share y-coordinate from the flagged post (Fr, 32-byte LE).
+    pub share_y: Hash,
+    /// Moderator signatures over
+    /// `H(content_id || strike_index || share_x || share_y)`.
     /// Must contain ≥ N entries with distinct, valid moderator keys.
     pub signatures: Vec<(ModeratorPubKey, ModeratorSig)>,
 }

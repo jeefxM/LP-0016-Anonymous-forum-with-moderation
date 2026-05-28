@@ -27,8 +27,8 @@ extern crate alloc;
 
 use bincode::Options;
 use membership_registry_core::{
-    empty_tree_root, simulate_register, Commitment, ForumConfig, ForumState, Instruction,
-    MerklePath,
+    empty_tree_root, simulate_register, slash::verify_slash, Commitment, ForumConfig, ForumState,
+    Instruction, MerklePath, ModerationCertificateWire,
 };
 use nssa_core::{
     account::{AccountWithMetadata, Data},
@@ -90,8 +90,32 @@ fn handle_register(
     alloc::vec![AccountPostState::new(account)]
 }
 
-fn handle_slash_stub(_commitment: Commitment) -> alloc::vec::Vec<AccountPostState> {
-    panic!("P5: slash verification not yet implemented");
+fn handle_slash(
+    pre_state: AccountWithMetadata,
+    secret: [u8; 32],
+    certificates: alloc::vec::Vec<ModerationCertificateWire>,
+    leaf_index: u32,
+    merkle_path: MerklePath,
+) -> alloc::vec::Vec<AccountPostState> {
+    let mut account = pre_state.account.clone();
+    let mut state = decode_state(account.data.as_ref());
+
+    let commitment = verify_slash(
+        &secret,
+        &certificates,
+        &state.config,
+        state.tree_root,
+        leaf_index,
+        &merkle_path,
+        &state.revocation_set,
+    )
+    .unwrap_or_else(|e| panic!("slash rejected: {e:?}"));
+
+    state.revocation_set.push(commitment);
+
+    let bytes = encode_state(&state);
+    account.data = Data::try_from(bytes).expect("ForumState fits within Data limit");
+    alloc::vec![AccountPostState::new(account)]
 }
 
 fn main() {
@@ -114,7 +138,18 @@ fn main() {
             path_before,
             leaf_index,
         } => handle_register(pre_state, commitment, path_before, leaf_index),
-        Instruction::Slash { commitment, .. } => handle_slash_stub(commitment),
+        Instruction::Slash {
+            reconstructed_secret,
+            certificates,
+            leaf_index,
+            merkle_path,
+        } => handle_slash(
+            pre_state,
+            reconstructed_secret,
+            certificates,
+            leaf_index,
+            merkle_path,
+        ),
     };
 
     ProgramOutput::new(

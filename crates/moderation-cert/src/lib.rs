@@ -26,14 +26,17 @@ use thiserror::Error;
 /// these signatures from being mis-applied to any other context.
 pub const DOMAIN: &[u8] = b"forum-protocol/v1/modcert";
 
-/// One moderator's signature over a (content_id, strike_index) pair.
-/// Holds the public key so `aggregate` can verify uniqueness without
-/// needing the caller to track ordering.
+/// One moderator's signature over a flagged post. The Shamir share
+/// `(share_x, share_y)` is part of what's signed, binding the cert to a
+/// specific post-proof output (ADR-008). Holds the public key so
+/// `aggregate` can verify uniqueness without the caller tracking ordering.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Vote {
     pub moderator_pub: ModeratorPubKey,
     pub content_id: Hash,
     pub strike_index: u8,
+    pub share_x: Hash,
+    pub share_y: Hash,
     pub signature: ModeratorSig,
 }
 
@@ -54,29 +57,42 @@ pub enum CertError {
 }
 
 /// Bytes a moderator signs. Domain-separated SHA-256 over the cert's
-/// canonical fields.
-pub fn message_to_sign(content_id: &Hash, strike_index: u8) -> [u8; 32] {
+/// canonical fields, including the bound Shamir share.
+pub fn message_to_sign(
+    content_id: &Hash,
+    strike_index: u8,
+    share_x: &Hash,
+    share_y: &Hash,
+) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(DOMAIN);
     h.update(content_id);
     h.update([strike_index]);
+    h.update(share_x);
+    h.update(share_y);
     let mut out = [0u8; 32];
     out.copy_from_slice(&h.finalize()[..]);
     out
 }
 
-/// Sign one vote. Used by moderator-side code in the SDK.
+/// Sign one vote. Used by moderator-side code in the SDK. The share is the
+/// `(share_x, share_y)` the moderator read from the flagged post's
+/// envelope.
 pub fn sign_vote(
     signing_key: &SigningKey,
     content_id: Hash,
     strike_index: u8,
+    share_x: Hash,
+    share_y: Hash,
 ) -> Vote {
-    let msg = message_to_sign(&content_id, strike_index);
+    let msg = message_to_sign(&content_id, strike_index, &share_x, &share_y);
     let signature: Signature = signing_key.sign(&msg);
     Vote {
         moderator_pub: signing_key.verifying_key().to_bytes(),
         content_id,
         strike_index,
+        share_x,
+        share_y,
         signature: ModeratorSig(signature.to_bytes()),
     }
 }
@@ -92,15 +108,21 @@ pub fn aggregate(votes: &[Vote], n_threshold: u8) -> Result<ModerationCertificat
     let first = &votes[0];
     let content_id = first.content_id;
     let strike_index = first.strike_index;
+    let share_x = first.share_x;
+    let share_y = first.share_y;
     for v in votes.iter().skip(1) {
-        if v.content_id != content_id || v.strike_index != strike_index {
+        if v.content_id != content_id
+            || v.strike_index != strike_index
+            || v.share_x != share_x
+            || v.share_y != share_y
+        {
             return Err(CertError::InconsistentVotes);
         }
     }
 
     // Validate each signature individually before deduping. Bad sigs
     // shouldn't count toward the threshold even if the key is unique.
-    let msg = message_to_sign(&content_id, strike_index);
+    let msg = message_to_sign(&content_id, strike_index, &share_x, &share_y);
     let mut accepted: Vec<(ModeratorPubKey, ModeratorSig)> = Vec::with_capacity(votes.len());
     for v in votes {
         let pubkey = VerifyingKey::from_bytes(&v.moderator_pub)
@@ -126,6 +148,8 @@ pub fn aggregate(votes: &[Vote], n_threshold: u8) -> Result<ModerationCertificat
     Ok(ModerationCertificateWire {
         content_id,
         strike_index,
+        share_x,
+        share_y,
         signatures: accepted,
     })
 }
@@ -144,7 +168,12 @@ pub fn verify(
             got: cert.signatures.len(),
         });
     }
-    let msg = message_to_sign(&cert.content_id, cert.strike_index);
+    let msg = message_to_sign(
+        &cert.content_id,
+        cert.strike_index,
+        &cert.share_x,
+        &cert.share_y,
+    );
     let mut seen: Vec<ModeratorPubKey> = Vec::with_capacity(cert.signatures.len());
     for (pub_bytes, sig_wire) in &cert.signatures {
         if !moderators.contains(pub_bytes) {
@@ -180,6 +209,22 @@ mod tests {
         (secrets, publics)
     }
 
+    // moderation-cert treats the share as opaque bytes — it signs over them
+    // but never interprets them. Derive deterministic dummy shares per
+    // content_id for the tests.
+    fn dummy_share(content_id: &Hash) -> (Hash, Hash) {
+        let mut x = [0u8; 32];
+        let mut y = [0u8; 32];
+        x[0] = content_id[0];
+        y[0] = content_id[0].wrapping_add(1);
+        (x, y)
+    }
+
+    fn sv(sk: &SigningKey, content_id: Hash, strike_index: u8) -> Vote {
+        let (x, y) = dummy_share(&content_id);
+        sign_vote(sk, content_id, strike_index, x, y)
+    }
+
     /// `moderation_cert_construction` — bounty-named test.
     /// Three of five moderators sign the same strike, aggregate succeeds.
     #[test]
@@ -191,7 +236,7 @@ mod tests {
         let votes: Vec<Vote> = secrets
             .iter()
             .take(3)
-            .map(|sk| sign_vote(sk, content_id, strike_index))
+            .map(|sk| sv(sk, content_id, strike_index))
             .collect();
 
         let cert = aggregate(&votes, 3).expect("3-of-5 must aggregate");
@@ -211,7 +256,7 @@ mod tests {
         let three_votes: Vec<Vote> = secrets
             .iter()
             .take(3)
-            .map(|sk| sign_vote(sk, content_id, strike_index))
+            .map(|sk| sv(sk, content_id, strike_index))
             .collect();
         let cert = aggregate(&three_votes, 3).unwrap();
         verify(&cert, &publics, 3).expect("3-of-5 must verify");
@@ -219,7 +264,7 @@ mod tests {
         let two_votes: Vec<Vote> = secrets
             .iter()
             .take(2)
-            .map(|sk| sign_vote(sk, content_id, strike_index))
+            .map(|sk| sv(sk, content_id, strike_index))
             .collect();
         let err = aggregate(&two_votes, 3).unwrap_err();
         assert_eq!(err, CertError::BelowThreshold { n: 3, got: 2 });
@@ -229,9 +274,9 @@ mod tests {
     fn rejects_duplicate_signer_in_aggregate() {
         let (secrets, _publics) = make_moderators(2);
         let content_id: Hash = [0xCCu8; 32];
-        let v1 = sign_vote(&secrets[0], content_id, 0);
+        let v1 = sv(&secrets[0], content_id, 0);
         let dup = v1.clone();
-        let v2 = sign_vote(&secrets[1], content_id, 0);
+        let v2 = sv(&secrets[1], content_id, 0);
         let err = aggregate(&[v1, dup, v2], 2).unwrap_err();
         assert_eq!(err, CertError::DuplicateSigner);
     }
@@ -244,9 +289,9 @@ mod tests {
         let mut rng = OsRng;
         let outsider = SigningKey::generate(&mut rng);
         let votes = vec![
-            sign_vote(&secrets[0], content_id, 0),
-            sign_vote(&secrets[1], content_id, 0),
-            sign_vote(&outsider, content_id, 0),
+            sv(&secrets[0], content_id, 0),
+            sv(&secrets[1], content_id, 0),
+            sv(&outsider, content_id, 0),
         ];
         let cert = aggregate(&votes, 3).unwrap();
         let err = verify(&cert, &publics, 3).unwrap_err();
@@ -256,8 +301,8 @@ mod tests {
     #[test]
     fn rejects_inconsistent_content_in_aggregate() {
         let (secrets, _publics) = make_moderators(2);
-        let v1 = sign_vote(&secrets[0], [0xAAu8; 32], 0);
-        let v2 = sign_vote(&secrets[1], [0xBBu8; 32], 0); // different content_id
+        let v1 = sv(&secrets[0], [0xAAu8; 32], 0);
+        let v2 = sv(&secrets[1], [0xBBu8; 32], 0); // different content_id
         let err = aggregate(&[v1, v2], 2).unwrap_err();
         assert_eq!(err, CertError::InconsistentVotes);
     }
@@ -266,8 +311,8 @@ mod tests {
     fn rejects_inconsistent_strike_index() {
         let (secrets, _publics) = make_moderators(2);
         let cid: Hash = [0xAAu8; 32];
-        let v1 = sign_vote(&secrets[0], cid, 0);
-        let v2 = sign_vote(&secrets[1], cid, 1);
+        let v1 = sv(&secrets[0], cid, 0);
+        let v2 = sv(&secrets[1], cid, 1);
         let err = aggregate(&[v1, v2], 2).unwrap_err();
         assert_eq!(err, CertError::InconsistentVotes);
     }
@@ -278,7 +323,7 @@ mod tests {
         let content_id: Hash = [0xEEu8; 32];
         let votes: Vec<Vote> = secrets
             .iter()
-            .map(|sk| sign_vote(sk, content_id, 0))
+            .map(|sk| sv(sk, content_id, 0))
             .collect();
         let mut cert = aggregate(&votes, 3).unwrap();
         cert.signatures[0].1 .0[0] ^= 0xFF; // flip a bit

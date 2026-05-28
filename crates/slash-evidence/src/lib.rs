@@ -64,10 +64,6 @@ pub struct SlashPayload {
 pub enum SlashError {
     #[error("not enough evidence: need {k} certs, got {got}")]
     BelowKThreshold { k: u8, got: usize },
-    #[error("certificate count and envelope count differ ({certs} vs {envelopes})")]
-    CountMismatch { certs: usize, envelopes: usize },
-    #[error("certificate {idx} does not match envelope content_id")]
-    CertEnvelopeMismatch { idx: usize },
     #[error("duplicate content_id across certificates")]
     DuplicateContent,
     #[error("certificate {idx}: {err}")]
@@ -91,12 +87,15 @@ pub fn commitment_of(secret: &[u8; 32]) -> Commitment {
     out
 }
 
-/// Aggregate ≥ K certs + their matching post envelopes into a complete
-/// slash payload ready for submission. The payload is rejected on-chain
-/// unless every field checks out.
+/// Aggregate ≥ K certs (each carrying a signed Shamir share) into a
+/// complete slash payload ready for submission. The payload is rejected
+/// on-chain unless every field checks out.
+///
+/// Because the share is now bound into and signed within each cert
+/// (ADR-008), the caller no longer supplies separate post envelopes — the
+/// shares come straight from the certs.
 pub fn build_slash_payload(
     certs: &[ModerationCertificateWire],
-    envelopes: &[PostEnvelope],
     moderators: &[ModeratorPubKey],
     n_threshold: u8,
     k_threshold: u8,
@@ -105,12 +104,6 @@ pub fn build_slash_payload(
     merkle_path: MerklePath,
     revocation_set: &[Commitment],
 ) -> Result<SlashPayload, SlashError> {
-    if certs.len() != envelopes.len() {
-        return Err(SlashError::CountMismatch {
-            certs: certs.len(),
-            envelopes: envelopes.len(),
-        });
-    }
     if (certs.len() as u8) < k_threshold {
         return Err(SlashError::BelowKThreshold {
             k: k_threshold,
@@ -118,14 +111,11 @@ pub fn build_slash_payload(
         });
     }
 
-    // 1. Each cert must verify on its own, AND must reference the same
-    //    content_id as its paired envelope.
-    for (idx, (cert, env)) in certs.iter().zip(envelopes.iter()).enumerate() {
+    // 1. Each cert must verify on its own (≥N valid moderator sigs over the
+    //    content_id, strike_index, and bound share).
+    for (idx, cert) in certs.iter().enumerate() {
         moderation_cert::verify(cert, moderators, n_threshold)
             .map_err(|err| SlashError::CertVerification { idx, err })?;
-        if cert.content_id != env.content_id {
-            return Err(SlashError::CertEnvelopeMismatch { idx });
-        }
     }
 
     // 2. content_id collisions across certs would feed duplicate x values
@@ -138,10 +128,15 @@ pub fn build_slash_payload(
         }
     }
 
-    // 3. Reconstruct the identity secret via Lagrange.
-    let points: Vec<(Fr, Fr)> = envelopes
+    // 3. Reconstruct the identity secret via Lagrange over the certs' shares.
+    let points: Vec<(Fr, Fr)> = certs
         .iter()
-        .map(|e| (e.share_x, e.share_y))
+        .map(|c| {
+            (
+                shamir::fr_from_bytes(&c.share_x),
+                shamir::fr_from_bytes(&c.share_y),
+            )
+        })
         .collect();
     let reconstructed_secret =
         shamir::reconstruct_secret(&points).map_err(SlashError::Reconstruction)?;
@@ -205,6 +200,7 @@ pub fn is_member_revoked(commitment: &Commitment, revocation_set: &[Commitment])
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
+    use membership_registry_core::ForumConfig;
     use moderation_cert::sign_vote;
     use post_proof_core::shamir::compute_share;
     use rand::rngs::OsRng;
@@ -261,23 +257,20 @@ mod tests {
         }
     }
 
+    /// Build a cert whose bound share is the member's real post-proof share
+    /// for `content_id`. This mirrors what a moderator does: read the share
+    /// off the flagged post envelope, then sign over it.
     fn build_cert(setup: &TestSetup, content_id: Hash, strike_index: u8) -> ModerationCertificateWire {
+        let (x_fr, y_fr) = compute_share(&setup.secret, setup.k_threshold as usize, &content_id);
+        let share_x = shamir::fr_to_bytes(&x_fr);
+        let share_y = shamir::fr_to_bytes(&y_fr);
         let votes: Vec<_> = setup
             .mod_secrets
             .iter()
             .take(setup.n_threshold as usize)
-            .map(|sk| sign_vote(sk, content_id, strike_index))
+            .map(|sk| sign_vote(sk, content_id, strike_index, share_x, share_y))
             .collect();
         moderation_cert::aggregate(&votes, setup.n_threshold).unwrap()
-    }
-
-    fn build_envelope(secret: &[u8; 32], k: u8, content_id: Hash) -> PostEnvelope {
-        let (x, y) = compute_share(secret, k as usize, &content_id);
-        PostEnvelope {
-            content_id,
-            share_x: x,
-            share_y: y,
-        }
     }
 
     /// `strike_accumulation` — bounty-named test.
@@ -292,14 +285,9 @@ mod tests {
             .enumerate()
             .map(|(i, cid)| build_cert(&s, *cid, i as u8))
             .collect();
-        let envelopes: Vec<_> = cids
-            .iter()
-            .map(|cid| build_envelope(&s.secret, s.k_threshold, *cid))
-            .collect();
 
         let payload = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
@@ -326,14 +314,9 @@ mod tests {
             .enumerate()
             .map(|(i, cid)| build_cert(&s, *cid, i as u8))
             .collect();
-        let envelopes: Vec<_> = cids
-            .iter()
-            .map(|cid| build_envelope(&s.secret, s.k_threshold, *cid))
-            .collect();
 
         let payload = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
@@ -362,13 +345,8 @@ mod tests {
             .enumerate()
             .map(|(i, cid)| build_cert(&s, *cid, i as u8))
             .collect();
-        let envelopes: Vec<_> = cids
-            .iter()
-            .map(|cid| build_envelope(&s.secret, s.k_threshold, *cid))
-            .collect();
         let payload = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
@@ -388,7 +366,6 @@ mod tests {
         // And the slasher can't re-slash a revoked member either.
         let err = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
@@ -401,6 +378,120 @@ mod tests {
         assert_eq!(err, SlashError::AlreadyRevoked);
     }
 
+    /// The vendored shamir copy in membership_registry_core must produce
+    /// byte-identical shares to the original in post_proof_core. Guards
+    /// against the two copies drifting (see the vendored-copy note in
+    /// membership_registry_core::shamir).
+    #[test]
+    fn vendored_shamir_matches_original() {
+        use membership_registry_core::shamir as vendored;
+        use post_proof_core::shamir as original;
+        let secret = {
+            let mut s = [0u8; 32];
+            s[0..16].copy_from_slice(&[0x5Cu8; 16]);
+            s
+        };
+        for k in 1..=5usize {
+            let oc = original::polynomial_coefficients(&secret, k);
+            let vc = vendored::polynomial_coefficients(&secret, k);
+            assert_eq!(oc, vc, "coeffs differ at k={k}");
+            for cid_byte in [0u8, 1, 7, 200] {
+                let cid = [cid_byte; 32];
+                let (ox, oy) = original::compute_share(&secret, k, &cid);
+                let (vx, vy) = (
+                    vendored::derive_share_x(&secret, &cid),
+                    vendored::poly_eval(&vc, vendored::derive_share_x(&secret, &cid)),
+                );
+                assert_eq!(ox, vx, "share_x differ k={k} cid={cid_byte}");
+                assert_eq!(oy, vy, "share_y differ k={k} cid={cid_byte}");
+            }
+        }
+    }
+
+    /// On-chain verify_slash accepts a correctly-reconstructed secret with
+    /// K valid share-bound certs.
+    #[test]
+    fn verify_slash_happy_path() {
+        use membership_registry_core::slash::verify_slash;
+        let s = setup(3, 5, 3);
+        let config = ForumConfig {
+            k_threshold: s.k_threshold,
+            n_threshold: s.n_threshold,
+            moderators: s.mod_pubs.clone(),
+            stake_amount: 1_000,
+        };
+        let cids = [[1u8; 32], [2u8; 32], [3u8; 32]];
+        let certs: Vec<_> = cids
+            .iter()
+            .enumerate()
+            .map(|(i, cid)| build_cert(&s, *cid, i as u8))
+            .collect();
+
+        let commitment = verify_slash(
+            &s.secret,
+            &certs,
+            &config,
+            s.tree_root,
+            0,
+            &s.leaf_path,
+            &[],
+        )
+        .expect("valid slash must verify on-chain");
+        assert_eq!(commitment, s.commitment);
+    }
+
+    /// A forged secret (not the one that produced the shares) is rejected
+    /// at the share_x binding check — this is the ADR-008 guarantee.
+    #[test]
+    fn verify_slash_rejects_forged_secret() {
+        use membership_registry_core::slash::{verify_slash, SlashVerifyError};
+        let s = setup(3, 5, 3);
+        let config = ForumConfig {
+            k_threshold: s.k_threshold,
+            n_threshold: s.n_threshold,
+            moderators: s.mod_pubs.clone(),
+            stake_amount: 1_000,
+        };
+        // Certs carry shares from member A (s.secret).
+        let cids = [[1u8; 32], [2u8; 32], [3u8; 32]];
+        let certs: Vec<_> = cids
+            .iter()
+            .enumerate()
+            .map(|(i, cid)| build_cert(&s, *cid, i as u8))
+            .collect();
+
+        // Attacker submits a DIFFERENT secret with A's certs.
+        let mut forged = [0u8; 32];
+        forged[0..16].copy_from_slice(&[0x11u8; 16]);
+        let err = verify_slash(&forged, &certs, &config, s.tree_root, 0, &s.leaf_path, &[])
+            .unwrap_err();
+        assert_eq!(err, SlashVerifyError::ShareXMismatch { idx: 0 });
+    }
+
+    /// A cert with fewer than N signatures is rejected.
+    #[test]
+    fn verify_slash_rejects_below_n() {
+        use membership_registry_core::slash::{verify_slash, SlashVerifyError};
+        let s = setup(3, 5, 3);
+        let config = ForumConfig {
+            k_threshold: s.k_threshold,
+            n_threshold: s.n_threshold,
+            moderators: s.mod_pubs.clone(),
+            stake_amount: 1_000,
+        };
+        let cids = [[1u8; 32], [2u8; 32], [3u8; 32]];
+        let mut certs: Vec<_> = cids
+            .iter()
+            .enumerate()
+            .map(|(i, cid)| build_cert(&s, *cid, i as u8))
+            .collect();
+        // Strip one signature from the first cert so it falls below N=3.
+        certs[0].signatures.pop();
+        let err = verify_slash(&s.secret, &certs, &config, s.tree_root, 0, &s.leaf_path, &[])
+            .unwrap_err();
+        assert_eq!(err, SlashVerifyError::CertBelowNThreshold { idx: 0 });
+    }
+
     #[test]
     fn below_k_rejected() {
         let s = setup(3, 5, 3);
@@ -410,13 +501,8 @@ mod tests {
             .enumerate()
             .map(|(i, cid)| build_cert(&s, *cid, i as u8))
             .collect();
-        let envelopes: Vec<_> = cids
-            .iter()
-            .map(|cid| build_envelope(&s.secret, s.k_threshold, *cid))
-            .collect();
         let err = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
@@ -438,14 +524,9 @@ mod tests {
             .enumerate()
             .map(|(i, cid)| build_cert(&s, *cid, i as u8))
             .collect();
-        let envelopes: Vec<_> = cids
-            .iter()
-            .map(|cid| build_envelope(&s.secret, s.k_threshold, *cid))
-            .collect();
         let bogus_root = [0xFFu8; 32];
         let err = build_slash_payload(
             &certs,
-            &envelopes,
             &s.mod_pubs,
             s.n_threshold,
             s.k_threshold,
