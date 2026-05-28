@@ -161,6 +161,37 @@ pub struct ModerationCertificateWire {
 pub mod tags {
     pub const COMMIT: &[u8] = b"commit";
     pub const NODE: &[u8] = b"node";
+    /// Seed-derivation tag for a forum's stake-escrow PDA (ADR-011).
+    pub const ESCROW: &[u8] = b"forum-protocol/v1/stake-escrow";
+}
+
+/// Staking value movement (ADR-011). Native value is moved by the LEZ
+/// `authenticated_transfer` program; the registry chains a call to it on
+/// register (member → escrow) and directly debits its own escrow PDA on
+/// slash (escrow → slasher). The escrow is a registry-owned PDA seeded from
+/// the forum seed.
+pub mod staking {
+    use serde::{Deserialize, Serialize};
+
+    /// Vendored copy of `authenticated_transfer_core::Instruction` so the
+    /// guest can serialize a chained `Transfer` without a cross-dir path dep
+    /// in the risc0 docker context (same rationale as the vendored shamir
+    /// module). Variant order + fields MUST stay byte-identical to the LEZ
+    /// crate: `Transfer { amount: u128 }` first, `Initialize` second.
+    #[derive(Serialize, Deserialize)]
+    pub enum AuthTransferInstruction {
+        /// Move `amount` native balance from `[sender, recipient]`.
+        Transfer { amount: u128 },
+        /// Initialize an account under authenticated_transfer ownership.
+        Initialize,
+    }
+
+    /// PDA seed for a forum's stake-escrow account, derived from the forum's
+    /// own PDA seed so each instance has its own escrow. The escrow
+    /// `AccountId` is `for_public_pda(registry_program_id, escrow_seed(..))`.
+    pub fn escrow_seed(forum_seed: &[u8; 32]) -> [u8; 32] {
+        super::sha256_concat(&[super::tags::ESCROW, forum_seed])
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────
