@@ -95,3 +95,25 @@ is purely an economic layer on register/slash.
   legal); the exact account ordering/authorization flags for the chained call.
   If a credit can't target a foreign-owned account, fall back to the
   escrow-is-a-vault variant (CPI both ways).
+
+## Funding path (resolved from the faucet/vault/auth-transfer guests)
+
+Native value lives in per-owner **vaults** (genesis funds vaults via the
+faucet). The faucet funds vaults, not direct balances, so getting *direct*
+balance onto the registry-owned escrow PDA is a fixed chain:
+
+1. The wallet creates/controls a member account (`create_new_account_public`).
+2. `faucet.Transfer { vault_program_id, recipient_id: member, amount }` →
+   member's **vault** (permissionless — genesis calls it with an empty witness).
+3. `vault.Claim { amount }` over `[member, member_vault]` (member-signed) →
+   member's **direct** balance (the account becomes authenticated_transfer-owned).
+4. `authenticated_transfer.Transfer { amount }` over `[member, escrow]`
+   (member-signed; `WalletCore::NativeTokenTransfer::send_public_transfer`
+   wraps this) → credits the escrow PDA's **direct** balance.
+5. `Register [state, escrow]` asserts `escrow.balance >= stake_amount × members`.
+6. `Slash [state, escrow, slasher]` direct-debits `stake_amount` → slasher.
+
+`send_public_transfer` already exists; `vault.Claim` has no wallet facade and is
+built manually in `lez-runner` (Message + WitnessSet + the account's nonce +
+its signing key). The runner reshape (multi-account `initialize`/`register`/
+`slash` + these funding steps) + live e2e is the remaining work.
