@@ -94,16 +94,17 @@ pub fn commitment_of(secret: &[u8; 32]) -> Commitment {
 /// Because the share is now bound into and signed within each cert
 /// (ADR-008), the caller no longer supplies separate post envelopes — the
 /// shares come straight from the certs.
-pub fn build_slash_payload(
+/// Verify ≥K share-bound certs and reconstruct the member's identity secret
+/// + commitment via Shamir Lagrange. Does NOT check the Merkle path or
+/// revocation set — that's [`build_slash_payload`]. Used by the daemon's
+/// `/v1/slash/recover` so a slasher can learn the commitment (and thus the
+/// member's leaf) before assembling the full evidence (ADR-009).
+pub fn recover_commitment(
     certs: &[ModerationCertificateWire],
     moderators: &[ModeratorPubKey],
     n_threshold: u8,
     k_threshold: u8,
-    tree_root: Hash,
-    leaf_index: u32,
-    merkle_path: MerklePath,
-    revocation_set: &[Commitment],
-) -> Result<SlashPayload, SlashError> {
+) -> Result<([u8; 32], Commitment), SlashError> {
     if (certs.len() as u8) < k_threshold {
         return Err(SlashError::BelowKThreshold {
             k: k_threshold,
@@ -140,9 +141,25 @@ pub fn build_slash_payload(
         .collect();
     let reconstructed_secret =
         shamir::reconstruct_secret(&points).map_err(SlashError::Reconstruction)?;
+    let commitment = commitment_of(&reconstructed_secret);
+    Ok((reconstructed_secret, commitment))
+}
+
+pub fn build_slash_payload(
+    certs: &[ModerationCertificateWire],
+    moderators: &[ModeratorPubKey],
+    n_threshold: u8,
+    k_threshold: u8,
+    tree_root: Hash,
+    leaf_index: u32,
+    merkle_path: MerklePath,
+    revocation_set: &[Commitment],
+) -> Result<SlashPayload, SlashError> {
+    // Verify certs + reconstruct the secret/commitment (steps 1–3).
+    let (reconstructed_secret, commitment) =
+        recover_commitment(certs, moderators, n_threshold, k_threshold)?;
 
     // 4. Verify the reconstructed commitment is in the tree.
-    let commitment = commitment_of(&reconstructed_secret);
     if revocation_set.iter().any(|r| r == &commitment) {
         return Err(SlashError::AlreadyRevoked);
     }

@@ -16,6 +16,7 @@ Filename: `ADR-NNN-short-kebab-title.md`.
 | [ADR-004](./ADR-004-prover-location-and-stateless-daemon.md) | Prover location: localhost daemon; daemon stateless about the tree | Accepted |
 | ADR-005 | Re-implement Semaphore+RLN natively in RISC0 | Pending (P1) |
 | ADR-006 | Moderator key storage: password-encrypted software key | Pending (P7) |
+| [ADR-009](./ADR-009-waku-transport.md) | Waku transport: topics, symmetric-only encryption, nullifier-keyed certs | Accepted |
 
 ## Template
 

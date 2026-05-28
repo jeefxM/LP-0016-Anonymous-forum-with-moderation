@@ -34,8 +34,8 @@ novel is done; the rest is packaging with no remaining crypto unknowns.
 | ↳ P6.1 SDK public API surface | ✅ done (`sdk/src/{types,index}.ts`, typechecks) |
 | ↳ P6.2 proof-daemon (Rust HTTP) | ✅ done; **11/12 endpoints smoke-verified on live chain (dev + real mode); slash/submit library-verified** |
 | ↳ P6.3 SDK client → daemon | ✅ done; **full lifecycle verified live via SDK imports** |
-| ↳ P6.4 Waku transport (js-waku) | ⬜ **NEXT** (pure TS, contract = types.ts) |
-| ↳ P6.5 SDK smoke test | 🟡 largely covered by `sdk/tests/integration.mjs`; finish once Waku lands |
+| ↳ P6.4 Waku transport (js-waku) | 🟡 built + unit-verified + tsc clean; **live nwaku round-trip still pending** |
+| ↳ P6.5 SDK smoke test | 🟡 largely covered by `sdk/tests/integration.mjs`; finish once Waku live-verified |
 | P7 Reference Basecamp app | ⬜ not started |
 | P8 Docs + IDL (SPEL) | ⬜ not started |
 | P9 Demo + testnet deploy + video | ⬜ not started |
@@ -53,7 +53,32 @@ Bounty-named tests: 6 of 7 at logic layer (`valid_registration`,
 satisfied by `bench_post_proof` (real receipt verifies) but not yet a
 named `#[test]` — see loose ends.
 
-## Immediate next action (P6.4)
+### P6.4 as built so far (Waku transport)
+
+Decisions in **ADR-009** (symmetric-only encryption; ECIES deferred — no SDK
+consumer; certs looked up by **nullifier**, not commitment; daemon stays
+tree-stateless). Delivered:
+- `sdk/src/transport.ts` — the only `@waku/*` importer. Node lifecycle
+  (`createLightNode` + dial static nwaku), per-forum content topics
+  (reg/post/cert), symmetric posts+certs / plaintext registrations, and pure
+  helpers `selectCertsForNullifier` + `RegistrationSync` (leafIndex-ordered,
+  gap-buffering, idempotent tree sync).
+- SDK surface (additive to P6.1): `publishPost`, `subscribePosts`,
+  `publishCertificate`, `listCertificatesByNullifier`,
+  `subscribeRegistrations`; `register` now announces its leaf; the slash path
+  is rekeyed to nullifier (`tryReconstructSlashEvidence(forum, nullifier)`
+  → daemon `/v1/slash/recover` → fill Merkle path from `config.tree`).
+- Daemon `/v1/slash/recover` (slash-evidence `recover_commitment`, rebuilt on
+  Hetzner). `SdkConfig.transport?: WakuTransport`.
+- **Dependency fix:** pinned `@multiformats/multiaddr@^12` via a pnpm
+  override — `@waku/enr@0.0.33` needs the v12 `./convert` subpath that v13
+  removed. Without it `@waku/sdk` won't even import. Clean reinstall applied.
+- Verified: 20 vitest tests (incl. transport join/ordering) + `tsc` clean.
+- **NOT yet verified:** the live Waku network round-trip (publish→store/
+  filter→receive) against a real nwaku, and slash-by-nullifier end-to-end.
+  That's the remaining P6.4 step (#63) — needs a local nwaku node brought up.
+
+## Immediate next action (P6.4 finish, then P7)
 
 P6.2 + P6.3 are done (see below). Build the Waku transport (`sdk/src`, pure
 TS via js-waku): publish/subscribe post envelopes + moderation certificates,

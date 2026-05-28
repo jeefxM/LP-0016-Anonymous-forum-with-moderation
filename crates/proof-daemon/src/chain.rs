@@ -5,12 +5,13 @@
 
 use axum::{extract::State, Json};
 use lez_runner::{initialize, poll_until, register as chain_register, slash};
-use slash_evidence::{build_slash_payload, commitment_of, SlashError};
+use slash_evidence::{build_slash_payload, commitment_of, recover_commitment, SlashError};
 
 use crate::dto::{
     enc, parse_hex32, parse_merkle_path, seed_for_forum, CreateForumReq, ForumIdReq,
-    ForumInstanceDto, IsRevokedReq, IsRevokedResp, ModerationCertificateDto, ReconstructReq,
-    RegisterReq, RegisterResp, SlashEvidenceDto, SubmitSlashReq, TxResp,
+    ForumInstanceDto, IsRevokedReq, IsRevokedResp, ModerationCertificateDto, RecoverReq,
+    RecoverResp, ReconstructReq, RegisterReq, RegisterResp, SlashEvidenceDto, SubmitSlashReq,
+    TxResp,
 };
 use crate::error::{ApiError, ApiResult, ErrorKind};
 use crate::state::SharedState;
@@ -136,6 +137,28 @@ pub async fn reconstruct(
         Err(SlashError::AlreadyRevoked) => {
             Err(ApiError::new(ErrorKind::Revoked, "member already revoked"))
         }
+        Err(e) => Err(ApiError::bad_request(e.to_string())),
+    }
+}
+
+/// Recover the member's secret + commitment from ≥K certs (no Merkle check).
+/// Lets the slasher learn the commitment — and thus the member's leaf — before
+/// assembling full slash evidence (ADR-009). Returns `null` below K.
+pub async fn recover(
+    State(state): State<SharedState>,
+    Json(req): Json<RecoverReq>,
+) -> ApiResult<Json<Option<RecoverResp>>> {
+    let (_pda, s) = state.forum_state(&req.forum_id).await?;
+    let mut certs = Vec::with_capacity(req.certificates.len());
+    for c in &req.certificates {
+        certs.push(c.to_wire()?);
+    }
+    match recover_commitment(&certs, &s.config.moderators, s.config.n_threshold, s.config.k_threshold) {
+        Ok((secret, commitment)) => Ok(Json(Some(RecoverResp {
+            reconstructed_secret: enc(&secret),
+            commitment: enc(&commitment),
+        }))),
+        Err(SlashError::BelowKThreshold { .. }) => Ok(Json(None)),
         Err(e) => Err(ApiError::bad_request(e.to_string())),
     }
 }

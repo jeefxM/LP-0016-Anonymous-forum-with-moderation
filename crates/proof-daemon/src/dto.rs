@@ -297,6 +297,20 @@ pub struct TxResp {
     pub tx_hash: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverReq {
+    pub forum_id: String,
+    pub certificates: Vec<ModerationCertificateDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoverResp {
+    pub reconstructed_secret: String,
+    pub commitment: String,
+}
+
 // ── posting / proving ────────────────────────────────────────────────
 
 #[derive(Deserialize)]

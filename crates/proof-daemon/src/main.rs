@@ -50,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/member/register", post(chain::register))
         .route("/v1/member/is-revoked", post(chain::is_revoked))
         .route("/v1/slash/reconstruct", post(chain::reconstruct))
+        .route("/v1/slash/recover", post(chain::recover))
         .route("/v1/slash/submit", post(chain::submit_slash))
         // proving
         .route("/v1/post/prove", post(proving::prove_post))

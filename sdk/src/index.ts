@@ -17,6 +17,7 @@
 
 export * from "./types.js";
 export * from "./tree.js";
+export * from "./transport.js";
 export { DEFAULT_DAEMON_URL } from "./client.js";
 
 import { daemonPost } from "./client.js";
@@ -34,6 +35,7 @@ import type {
 	SlashEvidence,
 } from "./types.js";
 import type { MerkleTree } from "./tree.js";
+import type { WakuTransport } from "./transport.js";
 
 export interface SdkConfig {
 	/** Base URL of the local proof daemon. Default http://127.0.0.1:8787. */
@@ -43,9 +45,16 @@ export interface SdkConfig {
 	/**
 	 * The SDK's view of the membership tree. Required for `register` and
 	 * `createPostProof`, which derive Merkle paths from it (ADR-004). The
-	 * caller owns it across calls; P6.4 keeps it in sync from Waku.
+	 * caller owns it across calls; `subscribeRegistrations` keeps it in sync
+	 * from Waku.
 	 */
 	tree?: MerkleTree;
+	/**
+	 * A connected Waku transport (ADR-009). Required for the post/cert/slash
+	 * functions that publish to or read from Waku. Create once with
+	 * `WakuTransport.connect(...)` and reuse across calls.
+	 */
+	transport?: WakuTransport;
 }
 
 // Daemon `ForumInstance` wire shape (stakeAmount is a decimal string).
@@ -81,6 +90,16 @@ function requireTree(config?: SdkConfig): MerkleTree {
 		);
 	}
 	return config.tree;
+}
+
+function requireTransport(config?: SdkConfig): WakuTransport {
+	if (!config?.transport) {
+		throw new ForumError(
+			"transport_error",
+			"config.transport (a connected WakuTransport) is required for this operation",
+		);
+	}
+	return config.transport;
 }
 
 // ─── 1. Forum instance lifecycle ─────────────────────────────────────
@@ -150,6 +169,11 @@ export async function register(
 		{ forumId: forum.forumId, commitment: identity.commitment, pathBefore, leafIndex },
 	);
 	tree.append(identity.commitment);
+	// Announce the new leaf so other members' trees can sync (ADR-009).
+	// Best-effort: a forum with no transport configured just skips it.
+	if (config?.transport) {
+		await config.transport.publishRegistration({ leafIndex, commitment: identity.commitment });
+	}
 	return resp;
 }
 
@@ -220,6 +244,42 @@ export async function verifyPostProof(
 	);
 }
 
+// ─── 3b. Transport: posts + tree sync (Waku) ─────────────────────────
+
+/** Publish a post envelope to the forum's Waku posts topic (ADR-009). */
+export async function publishPost(
+	_forum: ForumInstance,
+	envelope: PostEnvelope,
+	config?: SdkConfig,
+): Promise<void> {
+	await requireTransport(config).publishPost(envelope);
+}
+
+/** Subscribe to new post envelopes on the forum's Waku posts topic. Invokes
+ *  `onPost` for each. A forum app renders its feed from these. */
+export async function subscribePosts(
+	_forum: ForumInstance,
+	onPost: (envelope: PostEnvelope) => void,
+	config?: SdkConfig,
+): Promise<void> {
+	await requireTransport(config).subscribePosts(onPost);
+}
+
+/** Keep `config.tree` in sync with the forum's membership by replaying and
+ *  subscribing to the registrations topic (ADR-009). Registrations are
+ *  applied in leafIndex order. After the initial replay the local tree
+ *  should match `forum.treeRoot`; if it doesn't, the Waku Store window has
+ *  expired and the tree can't be fully rebuilt from Waku alone. */
+export async function subscribeRegistrations(
+	forum: ForumInstance,
+	config?: SdkConfig,
+	onUpdate?: () => void,
+): Promise<void> {
+	const tree = requireTree(config);
+	const transport = requireTransport(config);
+	await transport.syncRegistrations(tree, onUpdate);
+}
+
 // ─── 4. Moderation (moderator side) ──────────────────────────────────
 
 /** A moderator signs a strike against the post identified by `contentId`,
@@ -254,56 +314,67 @@ export async function aggregateCertificate(
 	});
 }
 
-/** Publish a certificate to Waku so it is publicly auditable. (P6.4) */
+/** Publish a certificate to the forum's Waku certs topic so any member can
+ *  audit it and assemble slash evidence (ADR-009). */
 export async function publishCertificate(
 	_forum: ForumInstance,
-	_cert: ModerationCertificate,
-	_config?: SdkConfig,
+	cert: ModerationCertificate,
+	config?: SdkConfig,
 ): Promise<void> {
-	throw new ForumError(
-		"transport_error",
-		"publishCertificate is implemented by the Waku transport layer (P6.4)",
-	);
+	await requireTransport(config).publishCertificate(cert);
 }
 
 // ─── 5. Slashing (any party) ─────────────────────────────────────────
 
-/** Fetch all published certificates targeting a given member commitment.
- *  (Waku — P6.4.) */
-export async function listCertificatesForMember(
+/** Fetch the certificates targeting a member identified by `nullifier`
+ *  (ADR-009). A slasher computes the nullifier from a flagged post envelope
+ *  they're investigating; the transport joins the posts topic
+ *  (contentId → nullifier) against the certs topic. */
+export async function listCertificatesByNullifier(
 	_forum: ForumInstance,
-	_commitment: Commitment,
-	_config?: SdkConfig,
+	nullifier: Hex32,
+	config?: SdkConfig,
 ): Promise<ModerationCertificate[]> {
-	throw new ForumError(
-		"transport_error",
-		"listCertificatesForMember is implemented by the Waku transport layer (P6.4)",
-	);
+	return requireTransport(config).listCertificatesByNullifier(nullifier);
 }
 
-/** Try to assemble slash evidence from accumulated certificates. Returns
- *  null if fewer than K are available. Reconstruction (Shamir Lagrange) and
- *  every check run in the daemon. Today this throws until Waku (P6.4)
- *  provides the certificates. */
+/** Try to assemble slash evidence for the member behind `nullifier`. Gathers
+ *  certs from Waku, reconstructs the secret + commitment in the daemon
+ *  (`/v1/slash/recover`), then fills the Merkle path from the local tree.
+ *  Returns null if fewer than K certs are available. */
 export async function tryReconstructSlashEvidence(
 	forum: ForumInstance,
-	commitment: Commitment,
+	nullifier: Hex32,
 	config?: SdkConfig,
 ): Promise<SlashEvidence | null> {
 	const tree = requireTree(config);
-	const leafIndex = tree.indexOf(commitment);
-	if (leafIndex < 0) {
-		throw new ForumError("not_found", "commitment is not in the local tree");
-	}
-	// Certificates live on Waku; this throws until P6.4 implements it.
-	const certificates = await listCertificatesForMember(forum, commitment, config);
+	const certificates = await listCertificatesByNullifier(forum, nullifier, config);
+	if (certificates.length < forum.kThreshold) return null;
 
-	return daemonPost<SlashEvidence | null>(config?.daemonUrl, "/v1/slash/reconstruct", {
+	const recovered = await daemonPost<{
+		reconstructedSecret: string;
+		commitment: string;
+	} | null>(config?.daemonUrl, "/v1/slash/recover", {
 		forumId: forum.forumId,
+		certificates,
+	});
+	if (!recovered) return null;
+
+	const leafIndex = tree.indexOf(recovered.commitment);
+	if (leafIndex < 0) {
+		throw new ForumError(
+			"not_found",
+			"recovered commitment is not in the local tree (sync the tree before slashing)",
+		);
+	}
+
+	return {
+		commitment: recovered.commitment,
+		reconstructedSecret: recovered.reconstructedSecret,
 		certificates,
 		leafIndex,
 		merklePath: tree.siblings(leafIndex),
-	});
+	};
 }
 
 /** Submit a slash transaction. Anyone may call this once evidence exists;
