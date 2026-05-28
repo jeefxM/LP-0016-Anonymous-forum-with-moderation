@@ -1,0 +1,9 @@
+node_modules/
+*_js/
+*.r1cs
+*.wtns
+*.zkey
+*.ptau
+witness.json
+input.json
+build/

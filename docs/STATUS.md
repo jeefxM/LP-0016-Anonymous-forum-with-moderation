@@ -102,8 +102,10 @@ changes). The risc0 LEZ register/slash program is unaffected.
 
 Tasks PERF-1..6:
 - ✅ PERF-1 ADR-010 spec (byte-exact preimages + scope guard).
-- 🟡 PERF-2 install circom + SHA-256 alignment pre-flight (circomlib sha256
-  of `"node"‖l‖r` == Rust sha2) — retires the #1 soundness risk.
+- ✅ PERF-2 circom 2.2.3 installed; **pre-flight PASSED** — circomlib SHA-256
+  over `"node"‖l‖r` is bit-identical to Rust sha2 (MSB-first bit order, 2-block
+  preimage confirmed). One node hash ≈ 62k constraints → full circuit ~1M →
+  rapidsnark required. See `circuits/preflight_*`.
 - ⬜ PERF-3 membership.circom (commitment, 16-level SHA256 Merkle, nullifier,
   share_x/coeffs with mod-r, Horner share_y). Per-K (K=2,3).
 - ⬜ PERF-4 ptau + groth16 setup per K.
