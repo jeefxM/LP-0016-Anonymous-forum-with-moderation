@@ -82,6 +82,38 @@ host-testable:
   bounty's "Logos stack for all off-chain activity" wording is ambiguous
   about. Available as a fallback.
 
+## Update (P5.2): real Shamir share crosses the segment boundary
+
+After P5.2 the post_proof guest computes the real BN254 Fr Shamir share
+(not the XOR placeholder). Re-bench on the same Hetzner CPU:
+
+| | Before (P3) | After real Shamir (P5.2) |
+|---|---:|---:|
+| Wall time | 28.07 s | **54.87 s** |
+| Total cycles | 262 144 (1 seg) | **524 288 (2 seg)** |
+| User cycles | 195 854 | 225 916 |
+
+User cycles only rose ~30 k, but that was enough to spill past the
+262 144 single-segment budget into a **second segment** — and because
+wall time is segment-bound (the core finding above), crossing that line
+roughly doubled the time.
+
+Two levers, in order of preference:
+
+1. **Trim ~30 k user cycles to stay in one segment.** The new cost is
+   ark-bn254 `from_le_bytes_mod_order` (called ~4× for coeff/x derivation)
+   plus `fr_to_bytes` ×2. Options: derive the K-1 polynomial coefficients
+   with fewer modular reductions; reuse the reduced secret Fr; or shrink
+   the Merkle proof side (TREE_DEPTH 16→12 saves ~4 node hashes). Getting
+   back under 262 144 returns us to ~27 s on this CPU.
+2. **Metal.** Still the decisive lever. Even at 2 segments, a 5–10×
+   Apple-Silicon speedup lands 54.87 s → 5–11 s. The pre-P9 gate now has
+   less margin, so we should ALSO do (1).
+
+Revised pre-P9 gate: apply optimisation (1), then bench on M-series Metal.
+Target < 10 s. If (1)+Metal still misses, escalate to Bonsai or an
+off-RISC0 circuit per the alternatives above.
+
 ## Open follow-ups
 
 - **Pre-P9 gate:** re-bench on M-series Metal with optimisations applied.
