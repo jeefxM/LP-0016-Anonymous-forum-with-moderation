@@ -1,0 +1,22 @@
+[package]
+name = "post_proof_core"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
+rust-version = "1.88"
+description = "Shared logic for the post_proof RISC0 guest (Merkle + hash + share)"
+# `edition`, `license`, etc. inlined (not workspace-inherited) for the same
+# reason as membership_registry_core: this crate sits in the guest's docker
+# build context which excludes the outer workspace Cargo.toml.
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+hex = "0.4"

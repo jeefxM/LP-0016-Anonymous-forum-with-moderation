@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "programs/membership_registry/core",
+    "programs/post_proof/core",
     "crates/proof-host",
     "crates/slash-evidence",
     "crates/lez-runner",

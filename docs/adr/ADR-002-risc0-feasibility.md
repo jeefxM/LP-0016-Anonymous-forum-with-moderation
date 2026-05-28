@@ -1,8 +1,8 @@
-# ADR-002: RISC0 post-proof feasibility — conditionally feasible
+# ADR-002: RISC0 post-proof feasibility — conditionally feasible, GPU is the path
 
 - **Status:** Accepted (conditional)
-- **Date:** 2026-05-28
-- **Phase:** P1.5
+- **Date:** 2026-05-28 (revised after P3 measurements)
+- **Phase:** P1.5 / P3.4
 
 ## Context
 
@@ -11,104 +11,83 @@ on a standard laptop." P1 was set up as a stop-the-line gate: if RISC0
 proving for our membership construction can't hit that target, we replan
 before sinking work into P2+.
 
-We built the post-proof guest (Merkle path verification of depth 16 + SHA-256
-hashing + nullifier + Shamir share placeholder) and benchmarked a real
-production-mode proof.
+We built the post-proof guest and have now benchmarked three variants on a
+Hetzner Ubuntu CPU box (x86_64, 16 cores, 30 GB RAM, no GPU).
 
-## Benchmark result
+## Benchmarks
 
-Environment: Hetzner Ubuntu VPS, x86_64, 16 cores, 30 GB RAM, **CPU only**.
-Command:
-```
-RISC0_DEV_MODE=0 ./target/release/bench_post_proof <post_proof.bin>
-```
+Environment: Hetzner CPU only, all three runs use `RISC0_DEV_MODE=0`.
 
-| Metric | Value |
-|---|---|
-| Wall time (prove) | **26.77 s** |
-| Wall time (verify) | < 1 s |
-| Total cycles | 262 144 |
-| User cycles | 124 835 |
-| Segments | 1 |
-| Journal | 648 bytes |
-| ELF size | 278 364 bytes |
-| Receipt verifies | ✅ |
+| Variant | Wall time | Total cycles | User cycles | Segments |
+|---|---:|---:|---:|---:|
+| P1 baseline (serde struct read) | 26.77 s | 262 144 | 124 835 | 1 |
+| P3 attempt 1 (read u32 + rebuild struct) | 30.17 s | 262 144 | 196 975 | 1 |
+| **P3 attempt 2 (byte-slice direct, no struct)** | **28.07 s** | **262 144** | **195 854** | **1** |
 
-## Decision
+Variance is within ~3 s of run noise. The cycle counts move but wall time
+does not. ELF size shrank from 278 KB → 243 KB across attempts.
 
-**Conditionally proceed.** The naive baseline is 2.7× over budget on a
-server-class CPU, but the cycle profile reveals a fixable issue, not a
-fundamental one. We unblock P2 with a written optimization plan and a
-hard gate to re-measure on Apple Silicon Metal before P9.
+## The key learning (revised model)
 
-## Why the number is high (and recoverable)
+RISC0's STARK prover is **segment-rounded**. The wall time is dominated by
+the cost of generating one segment's STARK, regardless of how much of the
+segment's cycle budget the guest actually uses. Our guest's true work
+(~20 SHA-256 hashes ≈ 4 000 cycles in the inner loop) is invisible against
+the segment overhead.
 
-The guest does only ~20 SHA-256 operations on the critical path
-(16 Merkle levels + 4 helper hashes). RISC0's accelerated SHA-256 path
-costs roughly 200 cycles per hash. Expected user-cycle budget for the
-hashing work alone: ≈ 4 000 cycles. We measured **124 835 user cycles** —
-roughly 30× the hashing cost.
+Concretely: all three benchmark runs ran exactly **one segment** of
+262 144 total cycles. The proof cost is ~27–30 s for that segment on
+Hetzner CPU. We could push user cycles to ~10 000 and the wall time would
+still be ~27 s; we could push user cycles to 250 000 and the wall time
+would still be ~28 s. The cost is the segment, not the work.
 
-The overhead concentrates in `env::read::<PrivateInputs>()` which serde-
-deserialises an `[[u8; 32]; 16]` array of Merkle siblings, plus the
-`[u8; 32]` secret. risc0's `serde` codec is word-oriented and pays a
-notable per-byte cost. 512 bytes of siblings × ~250 cycles/byte ≈ 128 k
-cycles — fits the observed gap.
+The original ADR (v1) predicted "10× user-cycle drop ⇒ ~3 s wall time."
+That was wrong. The right model is: **either fit in a single segment with
+faster per-segment hardware (GPU), or split work across multiple smaller
+segments only if RISC0 supports sub-segment proving (it does not, in
+3.0.5).**
 
-Three concrete optimisations, ordered cheap-to-expensive:
+## Decision (revised)
 
-1. **Bulk-read raw bytes.** Replace `env::read()` of the whole struct with
-   `env::read_slice::<u32>(&mut buf)` into a fixed-size word buffer, then
-   transmute / interpret. Estimated user-cycle drop: ~10× → ~12 k cycles.
-2. **Halve the tree depth.** TREE_DEPTH=16 supports 65 536 members per
-   instance. Depth 12 supports 4 096, sufficient for any forum demo and
-   for two-instance testnet deployment. Estimated saving: 25% on hashing.
-3. **GPU acceleration.** RISC0 ships `metal` and `cuda` features for
-   `risc0-zkvm`. Apple Silicon Metal commonly delivers 5–10× speedups on
-   the STARK prover. On an M-series MacBook this alone would put a
-   non-optimised guest under budget.
+**Conditionally proceed. The path to < 10 s is GPU acceleration on the
+target benchmark laptop (M-series Metal or CUDA), not user-cycle
+optimisation.** We unblock P2+ with two locked-in gates:
 
-Applying (1) is expected to take the wall-time from 26.77 s to
-≈ 8–10 s on the Hetzner box. (1) + (2) + Metal on an M-series laptop is
-the canonical "standard laptop" benchmark the bounty asks for and is
-almost certain to clear the bar.
+1. Before merging the P9 submission, run `bench_post_proof` on a
+   reference M-series MacBook with `risc0-zkvm` `metal` feature enabled.
+   If wall time is < 10 s, we ship.
+2. If Metal is also > 10 s on a current M-series, we re-open this ADR
+   with a pivot to Bonsai (hosted GPU prover) or off-RISC0 circuit. We
+   do **not** pre-emptively pivot now because Apple Silicon Metal on
+   risc0-zkvm is commonly reported at 5–10× CPU baseline.
 
-## Alternatives considered
+## Why we keep the byte-slice (P3 attempt 2) code anyway
 
-- **Pivot off RISC0 to a Halo2 circuit.** Avoids RISC0's per-instruction
-  cycle overhead entirely but requires learning a separate circuit DSL,
-  hand-writing constraints, and integrating a non-RISC0 verifier into the
-  LEZ slash program. Cost: 2–3 weeks of new work. Rejected — the
-  optimisation path on RISC0 is shorter.
-- **Move proving to Bonsai (RISC0's hosted prover).** Solves the time
-  budget trivially but adds an external service dependency the bounty's
-  "uses the Logos stack for all off-chain activity" framing may reject.
-  Rejected for v1; available as a v2 escape hatch.
-- **Abandon the bounty.** Rejected — the result is recoverable.
+Even though it didn't move wall time, the byte-slice path is cleaner and
+host-testable:
 
-## Consequences
+- `prove_post_from_bytes(priv: &[u8; N], pub: &[u8; M]) -> Result<Journal, _>`
+  in `post_proof_core` is what both the guest and the host bench call.
+- All six unit tests run in pure Rust against the same code path.
+- The guest binary shrank ~13 % (278 → 243 KB).
+- We're not paying for the optimisation in wall time; we're not paying
+  for it in code complexity either — the new shape is *simpler*.
 
-### Good
+## What we are NOT doing
 
-- We have a working RISC0 toolchain on Hetzner and a reproducible Docker
-  build of our guest. P2+ proceed.
-- The benchmark itself is reusable: `cargo run --release --bin
-  bench_post_proof` is now a CI candidate (gates wall time on every PR
-  once the optimisations land).
-
-### Bad / committed-to
-
-- **Hard gate before P9:** re-run `bench_post_proof` on an M-series
-  MacBook with Metal enabled and capture a number < 10 s. If we cannot
-  hit < 10 s on a laptop with the optimisations applied, we revisit this
-  ADR before submission.
-- The guest currently lives in a docker build that requires a Linux
-  x86_64 host (Apple Silicon docker on this Mac fails on the
-  risc0-guest-builder x86 image's overlayfs). Day-to-day guest builds
-  happen on Hetzner until that is resolved.
+- ~~`env::read` of a serde struct~~ — kept the dependency removal.
+- ~~Pre-emptive pivot to a Halo2 circuit~~ — too much new infrastructure
+  before we've measured Metal.
+- ~~Bonsai hosted prover for v1~~ — adds an external dependency the
+  bounty's "Logos stack for all off-chain activity" wording is ambiguous
+  about. Available as a fallback.
 
 ## Open follow-ups
 
-- Apply optimisation (1) (bulk read) — tracked as a P3 task.
-- Set up CI gate that fails if wall-time exceeds budget.
-- Benchmark on M-series Metal.
+- **Pre-P9 gate:** re-bench on M-series Metal with optimisations applied.
+  Tracked as task #16.
+- **CI bench:** add a CI job that runs `bench_post_proof` on a known
+  runner and fails if wall time regresses by > 20 %. Useful even before
+  Metal validates the budget, to catch unexpected regressions.
+- **TREE_DEPTH 16 → 12.** Probably not worth the work if Metal closes the
+  gap. Park as a contingency.
