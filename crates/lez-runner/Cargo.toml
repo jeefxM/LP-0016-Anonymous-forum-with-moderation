@@ -1,12 +1,31 @@
 [package]
 name = "lez-runner"
 version = "0.0.1"
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-rust-version.workspace = true
-description = "Host-side runner that builds and submits Register + Slash transactions to a LEZ sequencer"
+edition = "2021"
+license = "MIT"
+authors = ["Davit Maisuradze <denton.gaibo@gmail.com>"]
+rust-version = "1.88"
+description = "Host-side runner: submits Register + Slash transactions to a LEZ sequencer"
+
+# NOT a member of the parent forum-protocol workspace (see root Cargo.toml
+# `exclude`). It path-deps the LEZ workspace, which only exists as a sibling
+# checkout on the build host (Hetzner) and pulls in the heavy LEZ/circuits
+# build. Build it explicitly with its own manifest.
+[workspace]
+
+[[bin]]
+name = "forum_register"
+path = "src/bin/forum_register.rs"
 
 [dependencies]
-serde = { workspace = true }
-anyhow = { workspace = true }
+membership_registry_core = { path = "../../programs/membership_registry/core" }
+bincode = "1"
+hex = "0.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+# LEZ workspace crates — sibling checkout at ../../../lez on the build host.
+common = { path = "../../../lez/common" }
+nssa = { path = "../../../lez/nssa" }
+nssa_core = { path = "../../../lez/nssa/core" }
+wallet = { path = "../../../lez/wallet" }
+sequencer_service_rpc = { path = "../../../lez/sequencer/service/rpc", features = ["client"] }

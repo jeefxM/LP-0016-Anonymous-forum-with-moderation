@@ -9,7 +9,22 @@ A full LEZ stack runs on the Hetzner build box for integration testing.
 | Bedrock node | ✅ running | tmux session `bedrock`, docker compose, RPC :8080, producing blocks |
 | Sequencer | ✅ running | tmux session `seq`, RPC :3040, `RISC0_DEV_MODE=1` |
 | Wallet | ✅ initialised | `~/lez/wallet/configs/debug`, password `forum-protocol-dev` |
-| `membership_registry` program | ✅ **deployed** | first deploy block created; re-deploy returns `ProgramAlreadyExists` (confirms on-chain) |
+| `membership_registry` program | ✅ **deployed + exercised** | deployed; Initialize + Register run end-to-end (see below) |
+
+### Live Register end-to-end (2026-05-28)
+
+The `forum_register` runner (`crates/lez-runner`) drove a full lifecycle
+against the live sequencer:
+
+```
+→ Initialize    next_leaf_index=0  tree_root=34fc00e4…2431d44  (empty-tree root)
+→ Register A    next_leaf_index=1  tree_root=b6b5c41c…d8b703b5  (advanced)
+✅ tree_root advanced, next_leaf_index = 1
+```
+
+This is the live-chain proof of `valid_registration`: the guest's Merkle
+insertion executed on-chain exactly as the host-side `simulate_register`
+unit test predicted. Transaction hashes are in `~/seq.log`.
 
 ### membership_registry guest
 
