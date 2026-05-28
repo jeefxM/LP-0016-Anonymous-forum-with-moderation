@@ -8,6 +8,14 @@ moderation are off-chain (ADR-001, docs/protocol.md).
 > during testnet. The numbers below are measured against a local standalone
 > sequencer at LEZ rev `8c8f5b57` and should be re-measured on the public
 > testnet when available.
+>
+> Official guidance (Logos team, #blockchain, 2026-05-12): **there are no
+> official CUs for LEZ yet** — "you can measure cycles," and "we will not
+> reject a L-Prize if there are no CUs, as CUs are not defined." The accepted
+> reference pattern is a RISC0/LEZ-guest cycle benchmark like
+> `github.com/fryorcraken/lez-signature-bench`. The cycle/execution figures
+> below (plus the ADR-002 proving benchmark) therefore satisfy this
+> requirement; formal CU numbers can be added once the team defines them.
 
 ## How this was measured
 
