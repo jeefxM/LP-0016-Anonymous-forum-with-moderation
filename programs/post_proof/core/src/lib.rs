@@ -202,7 +202,7 @@ pub fn prove_post_from_bytes(
     }
 
     // 2. Nullifier ties this post to (secret, epoch).
-    let nullifier = sha256_concat(&[tags::NULL, secret, epoch_bytes]);
+    let nullifier = compute_nullifier(secret, u64::from_le_bytes(*epoch_bytes));
 
     // 3. Real Shamir share over BN254 Fr. The member's degree-(K-1)
     //    polynomial is deterministic in (secret, K); share_x is unique per
@@ -222,6 +222,31 @@ pub fn prove_post_from_bytes(
         share_x,
         share_y,
     })
+}
+
+// ── Nullifier + revocation enforcement ──────────────────────────────
+
+/// A member's post nullifier: `H("null" || secret || epoch_LE)`. Identical
+/// to the value committed by `prove_post` and emitted by the membership
+/// circuit. Deterministic in `(secret, epoch)`: same epoch ⇒ same nullifier
+/// (posts linkable within an epoch), different epochs ⇒ unlinkable.
+pub fn compute_nullifier(secret: &Hash, epoch: u64) -> Hash {
+    sha256_concat(&[tags::NULL, secret, &epoch.to_le_bytes()])
+}
+
+/// True if `nullifier_value` (from an anonymous post envelope at `epoch`)
+/// belongs to any revoked member.
+///
+/// A post envelope carries a nullifier, not a commitment, so a revoked
+/// member can't be matched by commitment. But once slashed, the member's
+/// secret is reconstructed and published on-chain (`ForumState.revoked_secrets`),
+/// so any verifier can recompute their nullifier for the post's (proven)
+/// epoch and reject the post. This is the enforcement side of the
+/// "retroactive deanonymization upon slash" property (docs/protocol.md).
+pub fn is_revoked_post(revoked_secrets: &[Hash], epoch: u64, nullifier_value: &Hash) -> bool {
+    revoked_secrets
+        .iter()
+        .any(|s| &compute_nullifier(s, epoch) == nullifier_value)
 }
 
 // ── Test helpers — used by both the host benchmark and unit tests ────
@@ -366,5 +391,37 @@ mod tests {
         // generate distinct shares — that's the requirement for
         // share-reveal-via-K-certs to work).
         assert_ne!(a.share_x, b.share_x);
+    }
+
+    /// Anonymous-path revocation enforcement: once a member's secret is
+    /// reconstructed on slash, their posts are rejectable in ANY epoch even
+    /// though the envelope carries only a nullifier (no commitment).
+    #[test]
+    fn revoked_member_posts_rejected_across_epochs() {
+        let secret = [1u8; 32];
+        let other = [2u8; 32];
+        let (root, siblings) = build_singleton_tree(&secret);
+        let post = |epoch: u64| {
+            prove_post(
+                &PrivateInputs { secret, merkle_siblings: siblings, merkle_path_bits: 0 },
+                &PublicInputs { tree_root: root, epoch, content_id: [9u8; 32], k_threshold: 3 },
+            )
+            .unwrap()
+        };
+
+        // The helper matches what prove_post commits (no drift).
+        let j1 = post(1);
+        assert_eq!(compute_nullifier(&secret, 1), j1.nullifier);
+
+        let revoked = [secret];
+        // The revoked member is caught in the epoch they were seen in...
+        assert!(is_revoked_post(&revoked, 1, &j1.nullifier));
+        // ...and in a fresh epoch they try to escape into.
+        let j2 = post(2);
+        assert!(is_revoked_post(&revoked, 2, &j2.nullifier));
+        // A non-revoked member's post is not flagged.
+        assert!(!is_revoked_post(&revoked, 1, &compute_nullifier(&other, 1)));
+        // Epoch must match: the revoked nullifier for epoch 1 isn't matched at epoch 2.
+        assert!(!is_revoked_post(&revoked, 2, &j1.nullifier));
     }
 }

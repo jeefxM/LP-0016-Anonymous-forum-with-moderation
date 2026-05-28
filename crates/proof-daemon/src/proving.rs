@@ -242,6 +242,14 @@ pub async fn verify_post(
         return Ok(invalid("proof targets a stale tree_root"));
     }
 
+    // Reject posts from a revoked member. The envelope is anonymous (no
+    // commitment), but a slashed member's secret is published on-chain, so
+    // their nullifier for the proven epoch is recomputable. The bind check
+    // above guarantees `env_epoch` is the epoch the proof committed to.
+    if post_proof_core::is_revoked_post(&s.revoked_secrets, env_epoch, &env_nullifier) {
+        return Ok(invalid("member has been revoked"));
+    }
+
     Ok(Json(VerifyPostResp {
         valid: true,
         reason: None,

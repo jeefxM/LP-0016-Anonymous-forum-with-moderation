@@ -61,6 +61,7 @@ fn handle_initialize(
         tree_root: empty_tree_root(),
         next_leaf_index: 0,
         revocation_set: alloc::vec::Vec::new(),
+        revoked_secrets: alloc::vec::Vec::new(),
         config,
     };
     let bytes = encode_state(&state);
@@ -112,6 +113,9 @@ fn handle_slash(
     .unwrap_or_else(|e| panic!("slash rejected: {e:?}"));
 
     state.revocation_set.push(commitment);
+    // Publish the reconstructed secret so verifiers can reject this member's
+    // future anonymous posts in any epoch (post_proof_core::is_revoked_post).
+    state.revoked_secrets.push(secret);
 
     let bytes = encode_state(&state);
     account.data = Data::try_from(bytes).expect("ForumState fits within Data limit");

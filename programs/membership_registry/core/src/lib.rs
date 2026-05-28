@@ -104,10 +104,17 @@ pub struct ForumState {
     /// no leaves are reclaimed (we don't reclaim on slash — revocation is
     /// tracked separately).
     pub next_leaf_index: u32,
-    /// Commitments that have been slashed. Posts whose proof points at one
-    /// of these commitments are rejected client-side. Stored as a flat
-    /// vector for v1; a Merkle root or Bloom filter is a v2 optimisation.
+    /// Commitments that have been slashed. `is_revoked(commitment)` checks
+    /// this; it also blocks re-slashing. Stored as a flat vector for v1; a
+    /// Merkle root or Bloom filter is a v2 optimisation.
     pub revocation_set: Vec<Commitment>,
+    /// Reconstructed identity secrets of slashed members, published on slash.
+    /// A post envelope is anonymous (nullifier, no commitment), so a revoked
+    /// member can't be matched by commitment — but their secret lets any
+    /// verifier recompute `H("null"||secret||epoch)` for any epoch and reject
+    /// their future posts (`post_proof_core::is_revoked_post`). This is the
+    /// on-chain, auditable basis for retroactive deanonymization on slash.
+    pub revoked_secrets: Vec<[u8; 32]>,
     /// Immutable per-instance configuration.
     pub config: ForumConfig,
 }
@@ -294,6 +301,7 @@ mod tests {
             tree_root: empty_tree_root(),
             next_leaf_index: 0,
             revocation_set: vec![],
+            revoked_secrets: vec![],
             config: sample_config(),
         };
 
@@ -322,6 +330,7 @@ mod tests {
             tree_root: empty_tree_root(),
             next_leaf_index: 0,
             revocation_set: vec![],
+            revoked_secrets: vec![],
             config: sample_config(),
         };
         let err = simulate_register(&state, [1u8; 32], &empty_path(), 5)
@@ -335,6 +344,7 @@ mod tests {
             tree_root: empty_tree_root(),
             next_leaf_index: 0,
             revocation_set: vec![],
+            revoked_secrets: vec![],
             config: sample_config(),
         };
         let mut bad_path = empty_path();

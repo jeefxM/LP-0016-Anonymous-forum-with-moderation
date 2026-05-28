@@ -216,11 +216,14 @@ function Feed() {
 
 function PostRow({ post }: { post: FeedPost }) {
   const sdk = useSdk();
+  const revoked = post.verified === false && (post.reason ?? "").includes("revoked");
   const badge =
     post.verified === null ? (
       <span style={{ ...mono, color: "#ffae5f" }}>verifying…</span>
     ) : post.verified ? (
       <span style={{ ...mono, color: "#5fd07a" }}>member ✅</span>
+    ) : revoked ? (
+      <span style={{ ...mono, color: "#ff8a8a" }}>revoked ❌</span>
     ) : (
       <span style={{ ...mono, color: "#ff8a8a" }}>invalid ❌</span>
     );

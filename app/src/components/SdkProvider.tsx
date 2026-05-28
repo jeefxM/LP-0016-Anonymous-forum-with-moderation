@@ -44,6 +44,7 @@ export interface FeedPost {
   envelope: PostEnvelope;
   text?: string;
   verified: boolean | null; // null = still checking
+  reason?: string; // verify failure reason (e.g. "member has been revoked")
   struck: boolean;
 }
 
@@ -112,7 +113,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
           setPosts((prev) =>
             prev.map((p) =>
               p.envelope.nullifier === envelope.nullifier && p.envelope.contentId === envelope.contentId
-                ? { ...p, verified: r.valid }
+                ? { ...p, verified: r.valid, reason: r.reason }
                 : p,
             ),
           ),
