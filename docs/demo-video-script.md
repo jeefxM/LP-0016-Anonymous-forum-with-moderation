@@ -165,15 +165,17 @@ the threat model section in `docs/protocol.md`.
 
 Stage directions / talking points:
 
-Show the seven bounty-named tests pass:
+Show the seven bounty-named tests pass, as a clean labelled checklist:
 
 ```sh
-cargo test --workspace --exclude proof-host
+bash scripts/bounty-tests.sh
 ```
 
-Point out the names in the output: `valid_registration`, `valid_post_proof`,
-`moderation_cert_construction`, `moderation_cert_verification`,
-`strike_accumulation`, `slash_submission`, `post_rejection_after_revocation`.
+This runs the host-side suite under the hood and prints each of the seven
+required tests as `PASS` (green) with a plain-English description, then
+`7/7 bounty-required tests passed`, then the raw `cargo` result lines. It's
+much easier to read on camera than the raw output. If you'd rather show the
+real thing, `cargo test --workspace --exclude proof-host` is what it wraps.
 
 Then the `RISC0_DEV_MODE=0` proof shot. This binary prints the env banner,
 generates a real RISC0 STARK proof, and verifies it:
