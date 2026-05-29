@@ -190,15 +190,22 @@ certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
   current SPEL release uses `v0.2.0-rc3`.
 - ✅ **Toolchain validated on Hetzner**: Rust 1.94 + cargo-risczero 3.0.5 +
   `spel` CLI (installed from `logos-co/spel`). A `spel init` scaffold passed
-  both `make idl` (IDL JSON generated) and `make build` (risc0 guest built
-  against `nssa_core@v0.2.0-rc3`). No `ruint 1.17` pin needed on this line.
-- ⬜ Scaffold the `membership_registry` SPEL project, wire
-  `membership_registry_core` (pure Rust, carries over), re-express the guest as
-  `#[lez_program(instruction = "membership_registry_core::Instruction")]` with
-  `#[account]` attrs + `#[account_type]` on `ForumState`.
-- ⬜ `make idl` → commit the IDL (satisfies IDL-via-SPEL).
+  both `make idl` and `make build` against `nssa_core@v0.2.0-rc3`.
+- ✅ **Project ported** (`programs/registry-spel/`): the guest is a
+  `#[lez_program]` module — Initialize/Register/Slash as `#[instruction]`
+  handlers with `#[account]` PDA attrs (state ← `arg("seed")`, registry-owned
+  escrow ← `account("state")`, slasher), all calling `membership_registry_core`
+  (vendored into the project — the risc0 docker context can't reach the outer
+  crate). Builds clean → **ImageID
+  `353c847815d363bbf51b72753c77ad8800e6f83e515211c7d8ef964546dd9887`**.
+- ✅ **IDL via SPEL**: `make idl` → `registry-spel-idl.json` with the full
+  instruction/account/PDA-seed layout. (Custom arg types like `ForumConfig`
+  are referenced by name; expanding their definitions needs `#[account_type]`
+  annotations — a later refinement; not required for the deliverable.)
 - ⬜ Deploy to `testnet.lez.logos.co` via the SPEL CLI, fund a BN254 member via
-  the faucet (rate-limited ~1/23h), run Initialize → stake → Register → Slash.
+  the faucet, run Initialize → stake → Register → Slash. **Gated**: the
+  `logosblocks` faucet is rate-limited ~1/23h per IP and is currently on
+  cooldown (tripped while probing), so the funded live run waits for that.
 - ⬜ Two live instances with different K/N-of-M (+ a K=2 circuit).
 
 ## Next after the perf gate (P7)
