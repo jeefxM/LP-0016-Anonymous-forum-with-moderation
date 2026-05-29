@@ -155,13 +155,21 @@ the threat model section in `docs/protocol.md`.
 > now the proof part. the bounty wants real proofs with RISC0_DEV_MODE=0, not
 > dev-mode fakes, so let me run the bench. *(run the bench)* you can see right
 > at the top it prints RISC0_DEV_MODE equals 0, then it actually generates the
-> proof and verifies it. quick honest note here, this specific guest is the
-> original RISC0 post-proof. i later switched the live membership proof to
-> Groth16 to hit that under-10-seconds target, so this shot is showing that
-> real RISC0 proving works in the repo, and on the chain side RISC0_DEV_MODE=0
-> is what governs the register and slash programs. and heres the sequencer
-> itself, *(run the `ps` line)* you can see its also running with DEV_MODE=0,
-> so theres no dev-mode shortcut anywhere.
+> proof and verifies it.
+>
+> quick note on this. this guest is the original RISC0 version of the
+> membership proof. the bounty wants that proof under 10 seconds on a normal
+> laptop, and as a RISC0 zkVM proof it was like 55 to 65 seconds, and RISC0
+> dropped apple-gpu support so theres no laptop gpu path either. so i moved the
+> live membership proof to a Groth16 circuit, which is actually what the bounty
+> points to, it calls it a "circuit" and lists Semaphore, which is a Groth16
+> system. that gets it down to about 4.7 seconds with no gpu. and this is fine
+> because posts are off-chain, the proof is checked by readers and the app,
+> never by the on-chain program. so the chain side stays RISC0 with
+> DEV_MODE=0, which is exactly what this bench and the sequencer are showing.
+>
+> and heres the sequencer itself, *(run the `ps` line)* you can see its also
+> running with DEV_MODE=0, so theres no dev-mode shortcut anywhere.
 
 Stage directions / talking points:
 
