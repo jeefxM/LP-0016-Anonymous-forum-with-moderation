@@ -81,37 +81,47 @@ Stage directions / talking points:
 
 **Say this (read aloud):**
 
-> ok so let me walk through how this actually works. theres basically three
-> layers, and the easiest way to picture it is like a private club. to join,
-> you put down a deposit and you whisper a secret, and the system writes a
-> scrambled version of your secret onto a big public list. your entry is on
-> there, but nobody can tell which one is yours. thats the on-chain part, the
-> membership registry, its a LEZ program and i built it with the SPEL framework
-> so it ships an IDL like the bounty wants.
+> ok so let me explain how this works, and ill use where i actually am as the
+> example. im at Network School right now, theres about 500 of us co-living
+> together and building tools for the community. and right now theres no
+> anonymous forum here, and no anonymous polls. thats actually a perfect use
+> case for this, because when you live with 500 people, posting honest feedback
+> or criticism under your own name is socially expensive, so people just dont.
+> an anonymous forum lets you say what you actually think and get judged on the
+> idea, not on who said it. but you still need moderation so it doesnt turn into
+> spam. thats exactly the problem this solves.
 >
-> then when you post, you attach a zero-knowledge proof that basically says
-> "im one of the members on that list and im not banned," without pointing to
-> which entry is you. thats the ZK layer, its a Groth16 circuit and it runs in
-> under 10 seconds.
+> so heres how it works, theres basically three layers. to join the forum, an
+> NS member puts down a small stake and picks a secret, and the system writes a
+> scrambled version of that secret onto a public list. youre on the list, but
+> nobody can tell which entry is yours. thats the on-chain part, the membership
+> registry, its a LEZ program and i built it with the SPEL framework so it ships
+> an IDL like the bounty wants.
 >
-> the third layer is everything off-chain. the actual posts and the moderation
-> certificates go over Waku, which is the logos messaging stack. so its free
-> and anyone can audit it.
+> then when you post, you attach a zero-knowledge proof that says "im one of the
+> registered members and im not banned", without revealing which member. thats
+> the ZK layer, a Groth16 circuit, runs in under 10 seconds.
 >
-> now heres the clever part, the unmasking. every single post secretly carries
-> one torn piece of your identity, using shamir secret sharing. one piece is
-> useless, two pieces useless. moderation is N-of-M, so you need a quorum of
-> moderators to agree before they can issue a strike, no single moderator can
-> act alone. each strike grabs one of your pieces. once enough strikes pile up,
-> thats the K threshold, the pieces tape back together and reconstruct your
-> secret. then anyone can take that to the chain. it bans you, it keeps your
-> stake, and now that your secret is out, all your past posts become linkable
-> too. so the punishment basically is the unmasking, and it happens
-> automatically from the math, not because some admin decided.
+> the third layer is everything off-chain. the posts and the moderation records
+> go over Waku, which is the logos messaging stack, so its free and anyone can
+> audit it.
 >
-> all the reasoning behind these choices is written up in the ADRs and the
-> protocol doc. the off-chain storage decision, the shamir threshold, the
-> N-of-M signatures, the staking escrow, its all in there.
+> now heres the clever part, the unmasking. every post you make secretly carries
+> one piece of your identity, using shamir secret sharing. one piece is useless.
+> moderation is N-of-M, so a few moderators have to agree before they can issue
+> a strike against a post, no single moderator can act alone. each strike grabs
+> one of your pieces. once enough strikes pile up, thats the K threshold, the
+> pieces combine and reconstruct your secret. at that point anyone can submit it
+> on-chain, it bans you, takes your stake, and now that your secret is out, your
+> past posts can be linked too. so the punishment is the unmasking, and it
+> happens automatically from the math, not because a moderator decided to dox
+> someone.
+>
+> and the same primitives would give you anonymous polls too, you prove youre a
+> member and vote once, without anyone seeing how you voted, which is another
+> thing we dont have here yet. all the reasoning behind these design choices,
+> the off-chain storage, the shamir threshold, the N-of-M signatures, the
+> staking escrow, its all written up in the ADRs and the protocol doc.
 
 Stage directions / talking points:
 
