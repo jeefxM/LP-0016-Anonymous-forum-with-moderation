@@ -6,15 +6,37 @@ length 8 to 12 minutes. The bounty needs narration (not a silent screencast),
 an architecture + decisions walkthrough, the full lifecycle, and terminal
 output that confirms `RISC0_DEV_MODE=0` and shows proof generation.
 
+## Where everything runs
+
+Segments 1, 2, 6 are you talking to camera (no screen needed). Segments 3, 4,
+and 5 all run **on the Hetzner server**, not the Mac. That's where the RISC0
+toolchain, the live daemon + nwaku + sequencer, and the testnet wallet live.
+
+Simplest setup: open one terminal on the Mac, SSH into Hetzner, and
+screen-record that terminal. Everything in 3 to 5 happens inside that one SSH
+session. No tunnels, no switching machines.
+
+Prep the session once (paste these after you SSH in, before recording):
+
+```sh
+ssh hetzner
+export PATH=$HOME/.cargo/bin:$PATH
+export NSSA_WALLET_HOME_DIR=~/wallet-testnet
+cd ~/forum-protocol
+```
+
 ## Before you hit record
 
-On the build host (Hetzner), confirm the stack is up:
+Confirm the stack is up (on Hetzner):
 
 ```sh
 tmux ls                       # expect: bedrock, seq, daemon
 ps aux | grep sequencer_service | grep -o 'RISC0_DEV_MODE=[01]'   # expect 0
 curl -s http://127.0.0.1:8787/v1/health                            # {"status":"ok",...}
 ```
+
+Note: on Hetzner run the demo with `node scripts/demo.mjs` (not `just`); the
+test command, the bench, and the wallet reads all run on Hetzner too.
 
 Local checklist:
 - Big terminal font, dark theme, wide window. Two panes help (commands left,
