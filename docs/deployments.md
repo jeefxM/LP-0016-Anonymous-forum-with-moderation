@@ -88,7 +88,7 @@ found in N blocks" while the tx still lands — verify by reading the account).
 | | Instance A | Instance B |
 |---|---|---|
 | **K** (revocation threshold) | 3 | 2 |
-| **N-of-M** (cert quorum) | 2-of-5 | 3-of-4 |
+| **N-of-M** (cert quorum) | 2-of-3 | 3-of-4 |
 | stake / member | 1000 | 1000 |
 | seed | `0x22…22` | `0x33…33` |
 | state PDA | `A5tj58u7kXKYSNM1Yq2NvXULWkRmQ3SRMC5DaZuzCfKG` | `29HtgrSfYa4AYy6GtysvdxtfNq3THZ2LudouXMRbPQre` |

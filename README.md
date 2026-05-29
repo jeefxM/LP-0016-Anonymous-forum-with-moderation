@@ -51,7 +51,7 @@ parameters):
 
 | | K | N-of-M | state PDA |
 |---|---|---|---|
-| Instance A | 3 | 2-of-5 | `A5tj58u7kXKYSNM1Yq2NvXULWkRmQ3SRMC5DaZuzCfKG` |
+| Instance A | 3 | 2-of-3 | `A5tj58u7kXKYSNM1Yq2NvXULWkRmQ3SRMC5DaZuzCfKG` |
 | Instance B | 2 | 3-of-4 | `29HtgrSfYa4AYy6GtysvdxtfNq3THZ2LudouXMRbPQre` |
 
 Both ran `initialize → fund escrow → register-with-stake` live. Escrow PDAs, tx

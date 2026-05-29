@@ -233,7 +233,7 @@ certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
   is complex to encode through the CLI; slash is proven via the V03State e2e
   (full lifecycle). Could flatten later for a live slash too.
 - ✅ **Two live instances with different K/N-of-M** on the testnet (program
-  `4766fcc2…`): Instance A seed `0x22..22` (K=3, N=2-of-5, state `A5tj58u7…`),
+  `4766fcc2…`): Instance A seed `0x22..22` (K=3, N=2-of-3, state `A5tj58u7…`),
   Instance B seed `0x33..33` (K=2, N=3-of-4, state `29HtgrSf…`, register tx
   `a282623b…`). Both ran initialize→fund→register-with-stake live; see
   `docs/deployments.md` for tx hashes + the scope note. The "K=2 circuit" is the
