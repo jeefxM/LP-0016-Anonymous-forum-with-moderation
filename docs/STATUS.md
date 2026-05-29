@@ -212,12 +212,25 @@ certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
   (`6iArKUXx…`=10000, `7wHg9sb…`=20000, auth-transfer-owned → spendable). The
   `logosblocks` faucet is the *bedrock* layer (BN254 `recipient_pk`), not LEZ —
   not needed. Wallet at `~/wallet-testnet` (password `forum-protocol-dev`).
-- ⬜ **Live run** (Initialize → stake → Register → Slash via the SPEL CLI):
-  blocked on the IDL not carrying the custom arg-type *definitions*
-  (`ForumConfig`, `ModerationCertificateWire`). The CLI errors
-  `expected Defined ForumConfig, got Raw`. Fix: annotate those types so they
-  appear in the IDL (`#[account_type]` + Borsh), regenerate the IDL, then the
-  CLI can build the txs. Then run against the preconfigured funded accounts.
+- ✅ **LIVE register-with-stake on the testnet** (program-id `4766fcc2…`,
+  seed `0x22..22`, state PDA `A5tj58u7…`, escrow PDA `CDn2DHcv…`):
+  - `initialize` — tx `4cd0e4e7…`, confirmed; state holds `ForumState`
+    (k=3, n=2, stake=1000), escrow claimed by the registry (balance 0).
+  - fund escrow `auth-transfer` 1000 from preconfigured `6iArKUXx…` → escrow
+    now balance 1000, **owner still the registry** (credit-preserves-owner
+    proven live, ADR-011 lynchpin).
+  - `register` — tx `6b5b359d…`; state advanced `next_leaf_index 0→1` and
+    `tree_root 34fc00e4… → f47cfa82…` (stake-check passed, member admitted).
+  - Arg encoding: `initialize`/`register` use IDL-native flat args (the SPEL
+    CLI can't build undefined struct args; `#[account_type]` is for
+    account-data types, not instruction args). The CLI also needs `--state`
+    explicitly for the `account("state")`-derived escrow PDA.
+  - Note: the v0.2.0-rc3 wallet's confirmation poll (5 blocks) is shorter than
+    the testnet's cadence, so txs report "not found in N blocks" but still
+    land — verify by reading the account, not the poll result.
+- ⬜ Live **slash** on testnet — its cert vector (`Vec<ModerationCertificateWire>`)
+  is complex to encode through the CLI; slash is proven via the V03State e2e
+  (full lifecycle). Could flatten later for a live slash too.
 - ⬜ Two live instances with different K/N-of-M (+ a K=2 circuit).
 
 ## Next after the perf gate (P7)
