@@ -202,10 +202,22 @@ certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
   instruction/account/PDA-seed layout. (Custom arg types like `ForumConfig`
   are referenced by name; expanding their definitions needs `#[account_type]`
   annotations — a later refinement; not required for the deliverable.)
-- ⬜ Deploy to `testnet.lez.logos.co` via the SPEL CLI, fund a BN254 member via
-  the faucet, run Initialize → stake → Register → Slash. **Gated**: the
-  `logosblocks` faucet is rate-limited ~1/23h per IP and is currently on
-  cooldown (tripped while probing), so the funded live run waits for that.
+- ✅ **DEPLOYED LIVE to `testnet.lez.logos.co`**. Built the v0.2.0-rc3 `wallet`,
+  `check-health` **confirmed our builtin program versions match the testnet**.
+  Size-optimized the guest (672KB → **341KB**, under the ~512KB deploy cap) and
+  `wallet deploy-program` succeeded (deploy exit 0). Live ImageID
+  `69373bb59ef0468f8f8748229d79f7cf54ca08b954bef983c641dcedd6d91d47`.
+- ✅ **Funding solved without the faucet**: the testnet wallet ships
+  preconfigured, wallet-controlled genesis-funded accounts
+  (`6iArKUXx…`=10000, `7wHg9sb…`=20000, auth-transfer-owned → spendable). The
+  `logosblocks` faucet is the *bedrock* layer (BN254 `recipient_pk`), not LEZ —
+  not needed. Wallet at `~/wallet-testnet` (password `forum-protocol-dev`).
+- ⬜ **Live run** (Initialize → stake → Register → Slash via the SPEL CLI):
+  blocked on the IDL not carrying the custom arg-type *definitions*
+  (`ForumConfig`, `ModerationCertificateWire`). The CLI errors
+  `expected Defined ForumConfig, got Raw`. Fix: annotate those types so they
+  appear in the IDL (`#[account_type]` + Borsh), regenerate the IDL, then the
+  CLI can build the txs. Then run against the preconfigured funded accounts.
 - ⬜ Two live instances with different K/N-of-M (+ a K=2 circuit).
 
 ## Next after the perf gate (P7)
