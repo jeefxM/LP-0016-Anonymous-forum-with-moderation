@@ -323,6 +323,54 @@ mod tests {
         assert_ne!(journal.share_y, [0u8; 32]);
     }
 
+    /// Bounty-named test (`valid_post_proof`, SPEC "Testing Strategy"): a
+    /// member's post proof is *valid* — every public output the guest commits
+    /// is exactly the value the construction mandates, so the proof verifies
+    /// and stays consistent with what `verify_slash` checks on slash. Unlike
+    /// `happy_path_proves` (non-zero spot-check), this re-derives each output.
+    #[test]
+    fn valid_post_proof() {
+        let secret = [7u8; 32];
+        let (root, siblings) = build_singleton_tree(&secret);
+        let private = PrivateInputs {
+            secret,
+            merkle_siblings: siblings,
+            merkle_path_bits: 0,
+        };
+        let public = PublicInputs {
+            tree_root: root,
+            epoch: 5,
+            content_id: [42u8; 32],
+            k_threshold: 3,
+        };
+
+        let journal = prove_post(&private, &public).expect("valid member must prove");
+
+        // 1. Membership holds: the committed root is the published root, and it
+        //    really is the Merkle root of this member's commitment.
+        assert_eq!(journal.tree_root, public.tree_root);
+        let mut cur = commitment_of(&secret);
+        for sib in &siblings {
+            cur = node_hash(&cur, sib); // merkle_path_bits == 0 → always left
+        }
+        assert_eq!(cur, journal.tree_root);
+
+        // 2. Nullifier is well-formed for (secret, epoch).
+        assert_eq!(journal.nullifier, compute_nullifier(&secret, public.epoch));
+
+        // 3. The committed Shamir share is the member's real share for this
+        //    (secret, K, content_id) — the exact value K moderation certs
+        //    reconstruct on slash, so verify_slash will agree with it.
+        let (x_fr, y_fr) =
+            shamir::compute_share(&secret, public.k_threshold as usize, &public.content_id);
+        assert_eq!(journal.share_x, shamir::fr_to_bytes(&x_fr));
+        assert_eq!(journal.share_y, shamir::fr_to_bytes(&y_fr));
+
+        // Echoed public inputs survive the round-trip.
+        assert_eq!(journal.epoch, public.epoch);
+        assert_eq!(journal.content_id, public.content_id);
+    }
+
     #[test]
     fn rejects_tampered_path() {
         let secret = [7u8; 32];
