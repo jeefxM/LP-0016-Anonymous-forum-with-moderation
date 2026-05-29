@@ -25,12 +25,13 @@ Three layers, by design (ADR-001, ADR-004):
   chain. Registration also locks a per-forum **stake** that the slasher claims
   on revocation — the economic skin-in-the-game behind the `K`-strike rule
   (implementation status in §8).
-- **Off-chain transport (Waku):** post envelopes, moderation certificates,
-  and registration announcements (ADR-009). Publicly readable; certificates
-  are auditable by anyone.
 - **Local prover (daemon):** generates and verifies the zero-knowledge
   membership proofs and submits chain transactions. The member's identity
   secret never leaves localhost (ADR-004).
+- **Off-chain transport (Waku):** post envelopes, moderation certificates,
+  and registration announcements (ADR-009). Publicly readable; certificates
+  are auditable by anyone.
+
 
 ### Roles
 
