@@ -89,11 +89,21 @@ Then click through the numbered panels:
    the certificates, submits the on-chain slash, and the member is revoked —
    their subsequent posts are rejected.
 
-### Headless reference (SDK only)
+### One-command demo (`just demo`)
 
-[`sdk/tests/lifecycle.mjs`](sdk/tests/lifecycle.mjs) drives the same
+With the backend up, from the repo root:
+
+```sh
+NWAKU_PEER=/ip4/127.0.0.1/tcp/8000/ws/p2p/<peerId> just demo
+```
+
+[`scripts/demo.mjs`](scripts/demo.mjs) runs the full
 register → post → 3× strike → slash → revoke flow through SDK imports against
-the daemon — the canonical end-to-end reference for library consumers.
+the live stack, and exits non-zero on any failed invariant. Chain transactions
+(register, slash) are executed and proven by the standalone sequencer with
+`RISC0_DEV_MODE=0` — real STARK proofs, not dev-mode receipts; the membership
+proof is Groth16. The same flow backs the SDK integration reference
+[`sdk/tests/lifecycle.mjs`](sdk/tests/lifecycle.mjs).
 
 ### On the public testnet
 
@@ -102,10 +112,8 @@ create more instances or reproduce the live flow, see the command sequence and
 tx hashes in [`docs/deployments.md`](docs/deployments.md); bringing the local
 stack back up is documented there too.
 
-> **Note:** the `just demo` one-command wrapper is not yet wired (it currently
-> errors); use the app flow or `lifecycle.mjs` above for the end-to-end run.
-> Real-proof (`RISC0_DEV_MODE=0`) costs for register and slash are in
-> [`docs/cu-costs.md`](docs/cu-costs.md).
+> **Note:** real-proof (`RISC0_DEV_MODE=0`) execution costs for register and
+> slash are in [`docs/cu-costs.md`](docs/cu-costs.md).
 
 ## Development
 

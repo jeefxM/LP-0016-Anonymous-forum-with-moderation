@@ -7,9 +7,19 @@ A full LEZ stack runs on the Hetzner build box for integration testing.
 | Component | Status | Detail |
 |---|---|---|
 | Bedrock node | ✅ running | tmux session `bedrock`, docker compose, RPC :8080, producing blocks |
-| Sequencer | ✅ running | tmux session `seq`, RPC :3040, `RISC0_DEV_MODE=1` |
+| Sequencer | ✅ running | tmux session `seq`, **`RISC0_DEV_MODE=0`** (real STARK proofs) |
 | Wallet | ✅ initialised | `~/lez/wallet/configs/debug`, password `forum-protocol-dev` |
 | `membership_registry` program | ✅ **deployed + exercised** | deployed; Initialize + Register run end-to-end (see below) |
+| proof daemon + nwaku | ✅ running | tmux `daemon` / `bedrock`; `just demo` drives the full lifecycle through them |
+
+> The one-command end-to-end demo is `scripts/demo.mjs` (`just demo`): full
+> register → post → N-of-M moderate → K strikes → slash → revoke through the
+> SDK, with chain txs proven by the `RISC0_DEV_MODE=0` sequencer and a Groth16
+> membership proof. Verified green (e.g. slash tx
+> `279fc3f3e835d78d51a9b0550e79575013f90e041ca5f9237ddac6d0b8a74a02`). The
+> daemon process carries a vestigial `RISC0_DEV_MODE=1` env, but it submits
+> chain txs to the sequencer (which proves them) and uses Groth16 for the
+> post-proof — so it does not affect proof realness.
 
 ### Live Register end-to-end (2026-05-28)
 
