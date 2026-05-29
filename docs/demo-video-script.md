@@ -79,27 +79,38 @@ Point out the names in the output: `valid_registration`, `valid_post_proof`,
 `moderation_cert_construction`, `moderation_cert_verification`,
 `strike_accumulation`, `slash_submission`, `post_rejection_after_revocation`.
 
-Then the mandatory `RISC0_DEV_MODE=0` proof shot. This binary prints the env
-banner, generates a real STARK proof, and verifies it:
+Then the `RISC0_DEV_MODE=0` proof shot. This binary prints the env banner,
+generates a real RISC0 STARK proof, and verifies it:
 
 ```sh
 RISC0_DEV_MODE=0 ./target/release/bench_post_proof \
   programs/post_proof/methods/guest/target/riscv32im-risc0-zkvm-elf/docker/post_proof.bin
 ```
 
-Narrate as it runs: "RISC0_DEV_MODE is 0, so this is a real proof, not a
-dev-mode receipt." Let the camera catch `prove() OK`, the cycle count, and
-`verify() OK`. Also show the sequencer's env so the audience sees the chain
-proves for real too:
+Let the camera catch the `RISC0_DEV_MODE = '0'` banner, `prove() OK`, the cycle
+count, and `verify() OK`.
+
+Narrate this honestly so it holds up under follow-up questions. Say something
+like: "This is the closest thing to a literal `RISC0_DEV_MODE=0` proof, and it
+shows real RISC0 proving works end to end in this repo. This particular guest
+is the original RISC0 membership post-proof. We later moved the live membership
+proof to Groth16 to hit the sub-10-second target (ADR-010 and `cu-costs.md`),
+so in production the post-proof is Groth16 and `RISC0_DEV_MODE` governs the
+RISC0 chain guests (register and slash)." Don't claim this bench is the live
+post-proof path.
+
+Then show the sequencer's env, so the audience sees the chain runs with no
+dev-mode shortcuts:
 
 ```sh
 ps aux | grep sequencer_service | grep -o 'RISC0_DEV_MODE=[01]'
 ```
 
-Accuracy note for narration: the membership post-proof is Groth16 (sub-10s,
-see `docs/cu-costs.md`); `RISC0_DEV_MODE` governs the RISC0 chain guest
-(register/slash) and the bench above. Don't claim the membership proof is
-RISC0. The point you're proving here is "no dev-mode shortcuts anywhere."
+Accuracy note: in standalone mode the sequencer *executes* each chain guest
+(the `seq.log` "execution time" lines, milliseconds) with `RISC0_DEV_MODE=0`,
+i.e. no dev-mode receipts. Frame it as "no dev-mode shortcuts," not "a multi-
+second STARK proof per transaction" — the heavy STARK proving is what the
+bench above demonstrates, and the membership proof is Groth16 (sub-10s).
 
 ## Segment 4 — Full lifecycle, end to end (3 to 4 min, terminal — the centerpiece)
 
