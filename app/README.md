@@ -26,7 +26,7 @@ Hetzner box for this bounty). The browser reaches them over an SSH tunnel.
 1. **Bring up the backend** (on the box that has the daemon + nwaku + chain):
    - LEZ sequencer + bedrock node (see `docs/dev/local-sequencer.md`)
    - nwaku (see `docs/adr/ADR-009-waku-transport.md` for the run command)
-   - proof daemon (see `docs/STATUS.md` "Run on Hetzner")
+   - proof daemon (`crates/proof-daemon`; see `docs/deployments.md`)
 
 2. **Tunnel** the daemon + nwaku websocket to your laptop:
    ```sh

@@ -46,3 +46,8 @@ coverage/
 # Local sequencer state
 rocksdb/
 bedrock_signing_key/
+
+# Internal working docs (kept locally, not part of the public submission)
+docs/STATUS.md
+docs/demo-video-script.md
+docs/tasks/

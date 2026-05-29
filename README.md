@@ -4,8 +4,8 @@ Anonymous forum protocol with threshold moderation and membership revocation.
 A submission for [Network School LP-0016][bounty].
 
 > **Status:** Protocol, SDK, and reference app built; the membership registry
-> is deployed and exercised live on the LEZ testnet (two instances). See
-> [`docs/STATUS.md`](docs/STATUS.md) for the authoritative state.
+> is deployed and exercised live on the LEZ testnet with two instances
+> (see [`docs/deployments.md`](docs/deployments.md)).
 
 ## What this is
 
