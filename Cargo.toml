@@ -19,6 +19,11 @@ exclude = [
     "programs/post_proof/methods/guest",
     "crates/lez-runner",
     "crates/proof-daemon",
+    # SPEL port (ADR-012): a self-contained spel-framework workspace built with
+    # `cargo risczero build` / the `spel` CLI on the build host. It vendors a
+    # copy of membership_registry_core (same package name) because the risc0
+    # docker build context can't reach the outer crate.
+    "programs/registry-spel",
 ]
 
 [workspace.package]

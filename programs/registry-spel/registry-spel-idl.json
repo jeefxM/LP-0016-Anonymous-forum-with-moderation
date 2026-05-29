@@ -1,0 +1,196 @@
+{
+  "accounts": [],
+  "errors": [],
+  "instructions": [
+    {
+      "accounts": [
+        {
+          "init": true,
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": true,
+          "name": "escrow",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "state"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "config",
+          "type": {
+            "defined": "ForumConfig"
+          }
+        },
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ],
+      "name": "initialize"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "escrow",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "state"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": false
+        }
+      ],
+      "args": [
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "commitment",
+          "type": {
+            "defined": "Commitment"
+          }
+        },
+        {
+          "name": "path_before",
+          "type": {
+            "defined": "MerklePath"
+          }
+        },
+        {
+          "name": "leaf_index",
+          "type": "u32"
+        }
+      ],
+      "name": "register"
+    },
+    {
+      "accounts": [
+        {
+          "init": false,
+          "name": "state",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "escrow",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "state"
+              }
+            ]
+          },
+          "signer": false,
+          "writable": true
+        },
+        {
+          "init": false,
+          "name": "slasher",
+          "signer": false,
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "reconstructed_secret",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "certificates",
+          "type": {
+            "vec": {
+              "defined": "ModerationCertificateWire"
+            }
+          }
+        },
+        {
+          "name": "leaf_index",
+          "type": "u32"
+        },
+        {
+          "name": "merkle_path",
+          "type": {
+            "defined": "MerklePath"
+          }
+        }
+      ],
+      "name": "slash"
+    }
+  ],
+  "name": "registry_spel",
+  "types": [],
+  "version": "0.1.0"
+}

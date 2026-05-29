@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "registry_spel_core",
+    "registry_spel_ffi",
+    "methods",
+    "examples",
+]
+exclude = [
+    "methods/guest",
+]
+resolver = "2"
