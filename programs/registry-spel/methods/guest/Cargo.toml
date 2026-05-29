@@ -19,3 +19,13 @@ borsh = "1.5"
 bincode = "1"
 ruint = "=1.17.0"
 
+# Size-optimized profile: the testnet caps a program-deployment tx at ~512 KB
+# and the slash-verification crypto (ark-bn254 + ed25519) makes the guest ELF
+# large. Optimize for size. Thin LTO (not fat) — fat LTO wedged on the build
+# host's memory/disk; thin is parallel + light and still shrinks the ELF.
+[profile.release]
+opt-level = "z"
+lto = "thin"
+strip = true
+panic = "abort"
+
