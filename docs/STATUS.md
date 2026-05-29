@@ -173,9 +173,33 @@ Findings that shaped this (see ADR-011 "Build outcome"):
 ⬜ Follow-ups (not blocking the staking proof):
 - **daemon DTOs/handlers + SDK** to thread escrow/slasher/funding so the app
   path stakes too (lower priority).
-- **public testnet run** at `https://testnet.lez.logos.co` — runs a *different*
-  LEZ version (system-program ids differ from rev `8c8f5b57`), so needs the
-  guest + runner rebuilt against the testnet rev and a testnet funding source.
+- **public testnet run** — see the SPEL port below (it's the vehicle).
+
+## SPEL port (ADR-012) — in progress
+
+Porting the on-chain program to `spel-framework` on the current LEZ to unblock
+**IDL via SPEL** + the **live testnet**. The crypto protocol (core, circuits,
+certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
+`main` is re-expressed as a `#[lez_program]` module + `lez-runner` → SPEL CLI.
+
+- ✅ **Version pinned**: the current LEZ is `logos-execution-zone` tag
+  **`v0.2.0-rc3` (cf3639d8)** (what `spel-framework` v0.4.0 / `logos-co/spel`
+  HEAD `d24dbaa` pins, and almost certainly what `testnet.lez.logos.co` runs —
+  its faucet wants **BN254 Fr** account keys, vs secp256k1 on our old
+  `8c8f5b57`). Earlier the multisig reference pinned `lssa@767b5afd`; the
+  current SPEL release uses `v0.2.0-rc3`.
+- ✅ **Toolchain validated on Hetzner**: Rust 1.94 + cargo-risczero 3.0.5 +
+  `spel` CLI (installed from `logos-co/spel`). A `spel init` scaffold passed
+  both `make idl` (IDL JSON generated) and `make build` (risc0 guest built
+  against `nssa_core@v0.2.0-rc3`). No `ruint 1.17` pin needed on this line.
+- ⬜ Scaffold the `membership_registry` SPEL project, wire
+  `membership_registry_core` (pure Rust, carries over), re-express the guest as
+  `#[lez_program(instruction = "membership_registry_core::Instruction")]` with
+  `#[account]` attrs + `#[account_type]` on `ForumState`.
+- ⬜ `make idl` → commit the IDL (satisfies IDL-via-SPEL).
+- ⬜ Deploy to `testnet.lez.logos.co` via the SPEL CLI, fund a BN254 member via
+  the faucet (rate-limited ~1/23h), run Initialize → stake → Register → Slash.
+- ⬜ Two live instances with different K/N-of-M (+ a K=2 circuit).
 
 ## Next after the perf gate (P7)
 
