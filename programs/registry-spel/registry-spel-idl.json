@@ -35,10 +35,27 @@
       ],
       "args": [
         {
-          "name": "config",
+          "name": "k_threshold",
+          "type": "u8"
+        },
+        {
+          "name": "n_threshold",
+          "type": "u8"
+        },
+        {
+          "name": "moderators",
           "type": {
-            "defined": "ForumConfig"
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
+        },
+        {
+          "name": "stake_amount",
+          "type": "u128"
         },
         {
           "name": "seed",
@@ -96,13 +113,21 @@
         {
           "name": "commitment",
           "type": {
-            "defined": "Commitment"
+            "array": [
+              "u8",
+              32
+            ]
           }
         },
         {
           "name": "path_before",
           "type": {
-            "defined": "MerklePath"
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         },
         {

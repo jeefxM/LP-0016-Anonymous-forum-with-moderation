@@ -13,8 +13,8 @@
 
 use bincode::Options;
 use membership_registry_core::{
-    empty_tree_root, simulate_register, slash::verify_slash, Commitment, ForumConfig, ForumState,
-    MerklePath, ModerationCertificateWire,
+    empty_tree_root, simulate_register, slash::verify_slash, ForumConfig as CoreForumConfig,
+    ForumState, MerklePath, ModerationCertificateWire,
 };
 use nssa_core::account::{AccountWithMetadata, Data};
 use spel_framework::prelude::*;
@@ -47,12 +47,18 @@ mod registry_spel {
     use super::*;
 
     /// Create a forum instance: claim the state PDA (holds `ForumState`) and a
-    /// registry-owned escrow PDA (pools stake; empty at first).
+    /// registry-owned escrow PDA (pools stake; empty at first). Config is
+    /// passed as flat primitives (not a struct) so the auto-generated SPEL CLI
+    /// can build the tx from IDL-native types; the handler assembles the core
+    /// `ForumConfig` from them.
     #[instruction]
     pub fn initialize(
         #[account(init, pda = arg("seed"))] mut state: AccountWithMetadata,
         #[account(init, pda = account("state"))] escrow: AccountWithMetadata,
-        config: ForumConfig,
+        k_threshold: u8,
+        n_threshold: u8,
+        moderators: Vec<[u8; 32]>,
+        stake_amount: u128,
         seed: [u8; 32],
     ) -> SpelResult {
         let _ = &seed; // referenced by pda = arg("seed")
@@ -61,7 +67,12 @@ mod registry_spel {
             next_leaf_index: 0,
             revocation_set: Vec::new(),
             revoked_secrets: Vec::new(),
-            config,
+            config: CoreForumConfig {
+                k_threshold,
+                n_threshold,
+                moderators,
+                stake_amount,
+            },
         };
         store_state(&mut state, &forum)?;
         Ok(SpelOutput::execute(vec![state, escrow], vec![]))
@@ -75,8 +86,8 @@ mod registry_spel {
         #[account(mut, pda = arg("seed"))] mut state: AccountWithMetadata,
         #[account(pda = account("state"))] escrow: AccountWithMetadata,
         seed: [u8; 32],
-        commitment: Commitment,
-        path_before: MerklePath,
+        commitment: [u8; 32],
+        path_before: Vec<[u8; 32]>,
         leaf_index: u32,
     ) -> SpelResult {
         let _ = &seed;
@@ -95,7 +106,10 @@ mod registry_spel {
             ));
         }
 
-        let next = simulate_register(&forum, commitment, &path_before, leaf_index)
+        let path: MerklePath = path_before
+            .try_into()
+            .map_err(|_| SpelError::custom(23, "merkle path wrong length"))?;
+        let next = simulate_register(&forum, commitment, &path, leaf_index)
             .map_err(|e| SpelError::custom(22, format!("register rejected: {e}")))?;
         store_state(&mut state, &next)?;
         Ok(SpelOutput::execute(vec![state, escrow], vec![]))
