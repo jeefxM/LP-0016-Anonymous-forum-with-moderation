@@ -46,12 +46,13 @@ post_proof_core 12 · moderation-cert 8 · membership_registry_core 11 ·
 slash-evidence 10 = **41 tests**. Plus Register + full Slash proven on a
 live chain via `crates/lez-runner` (`forum_register`, `forum_slash`).
 
-Bounty-named tests: 6 of 7 at logic layer (`valid_registration`,
-`moderation_cert_construction`, `moderation_cert_verification`,
-`strike_accumulation`, `slash_submission`,
-`post_rejection_after_revocation`). The 7th, `valid_post_proof`, is
-satisfied by `bench_post_proof` (real receipt verifies) but not yet a
-named `#[test]` — see loose ends.
+Bounty-named tests: all 7 at logic layer (`valid_registration`,
+`valid_post_proof`, `moderation_cert_construction`,
+`moderation_cert_verification`, `strike_accumulation`, `slash_submission`,
+`post_rejection_after_revocation`). `valid_post_proof`
+(`post_proof_core`) re-derives every committed Journal output against the
+construction; the real zkVM receipt is additionally exercised by
+`bench_post_proof` + the `RISC0_DEV_MODE=0` demo.
 
 ### P6.4 as built so far (Waku transport)
 
@@ -345,8 +346,10 @@ RISC0_DEV_MODE=1 ./target/release/proof-daemon > ~/daemon.log 2>&1"
 - **#16 Pre-P9: re-bench post_proof on M-series Metal.** The decisive perf
   gate. Target <10s. risc0-zkvm `metal` feature. If (#43)+Metal still
   misses, escalate to Bonsai or off-RISC0 circuit (ADR-002 alternatives).
-- **P5.5: add `valid_post_proof` as a named `#[test]`** wrapping the
-  bench_post_proof prove+verify (mark `#[ignore]` for CI — ~30s).
+- ~~**P5.5: add `valid_post_proof` as a named `#[test]`**~~ DONE
+  (`post_proof_core`, commit `77c5008`). Implemented at the logic layer
+  (re-derives root/nullifier/share), not the slow zkVM path, so it stays
+  in the portable `cargo test` suite with the other six.
 - **#13 P8: locate the SPEL framework** for the membership-registry IDL
   (bounty Usability requirement). Not in the LEZ repo; it's a separate
   Logos-team artifact. Ask in their builder channel / find the repo.
