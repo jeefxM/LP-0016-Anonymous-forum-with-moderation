@@ -39,10 +39,13 @@ fmt:
 dev:
     pnpm --filter app dev
 
-# End-to-end demo with production RISC0 (bounty-required)
+# End-to-end demo: full lifecycle with real proofs (sequencer RISC0_DEV_MODE=0
+# + Groth16 membership proof). Backend must be up first; see
+# docs/deployments.md and app/README.md. Pass the nwaku /ws multiaddr via env:
+#   NWAKU_PEER=/ip4/127.0.0.1/tcp/8000/ws/p2p/<peerId> just demo
 demo:
-    @echo "🎬 Demo lands in P9"
-    @false
+    pnpm --filter @logos-forum/moderation-sdk build
+    node scripts/demo.mjs
 
 # Wipe build artifacts
 clean:
