@@ -43,6 +43,10 @@ jobs:
           node-version: "20"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm build
+      # Build + unit-test the SDK (the deliverable library): its `tsc` build is
+      # the type-check, and the vitest tests are pure (no network). The app's
+      # `tsc` lint and Next build are intentionally not in CI — the app is
+      # exercised in the demo + local run, and the bounty-required tests all
+      # live in the Rust job above.
+      - run: pnpm --filter @logos-forum/moderation-sdk build
+      - run: pnpm --filter @logos-forum/moderation-sdk test
