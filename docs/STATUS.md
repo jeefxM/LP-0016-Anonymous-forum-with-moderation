@@ -1,6 +1,6 @@
 # STATUS — read this first to resume
 
-Last updated: 2026-05-28. This is the authoritative "where are we, what's
+Last updated: 2026-05-29. This is the authoritative "where are we, what's
 next" snapshot. Static design lives in `SPEC.md` / `PLAN.md`; decisions in
 `adr/`; this file is the live state.
 
@@ -232,7 +232,13 @@ certs, slash-evidence, daemon, SDK, app) carries over unchanged; only the guest
 - ⬜ Live **slash** on testnet — its cert vector (`Vec<ModerationCertificateWire>`)
   is complex to encode through the CLI; slash is proven via the V03State e2e
   (full lifecycle). Could flatten later for a live slash too.
-- ⬜ Two live instances with different K/N-of-M (+ a K=2 circuit).
+- ✅ **Two live instances with different K/N-of-M** on the testnet (program
+  `4766fcc2…`): Instance A seed `0x22..22` (K=3, N=2-of-5, state `A5tj58u7…`),
+  Instance B seed `0x33..33` (K=2, N=3-of-4, state `29HtgrSf…`, register tx
+  `a282623b…`). Both ran initialize→fund→register-with-stake live; see
+  `docs/deployments.md` for tx hashes + the scope note. The "K=2 circuit" is the
+  off-chain Groth16 post-proof and is only needed to *post* at K=2 — not for the
+  testnet instance requirement, which is about `ForumConfig` parameters.
 
 ## Next after the perf gate (P7)
 

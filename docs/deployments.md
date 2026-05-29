@@ -65,9 +65,52 @@ revoke — now runs end-to-end on-chain.
 
 ## Public LEZ testnet
 
-Not yet deployed. The bounty requires two live instances with different
-K and N-of-M parameters. Blocked on obtaining a public testnet endpoint +
-faucet from the Logos team. Tracked separately.
+Sequencer: `https://testnet.lez.logos.co` (config posted by David @ Logos).
+The membership registry is the **SPEL** build (ADR-012), deployed once; both
+forum instances live under the same program. Funding uses the wallet's
+preconfigured genesis accounts (the `logosblocks` faucet is the bedrock layer,
+not LEZ — see STATUS "SPEL port").
+
+**Program ID (verified, both instances):**
+`4766fcc24cac757ab4c504b3844c354468f4d7fbb7b630957573513c6eb9a30d`
+(guest ImageID `69373bb59ef0468f8f8748229d79f7cf54ca08b954bef983c641dcedd6d91d47`,
+341 KB).
+
+A forum *instance* is a seed-derived `ForumState` PDA (+ its escrow PDA) under
+this one program; `ForumConfig` carries the per-instance K and N-of-M. So the
+two required instances differ in **parameters**, not program ID — matching the
+bounty's "different K and N-of-M parameters" and the protocol's parameterized
+design. Each ran `initialize → fund escrow → register-with-stake` live; all
+confirmed by reading the on-chain accounts (the v0.2.0-rc3 wallet's 5-block
+confirmation poll is shorter than the testnet's cadence, so it prints "not
+found in N blocks" while the tx still lands — verify by reading the account).
+
+| | Instance A | Instance B |
+|---|---|---|
+| **K** (revocation threshold) | 3 | 2 |
+| **N-of-M** (cert quorum) | 2-of-5 | 3-of-4 |
+| stake / member | 1000 | 1000 |
+| seed | `0x22…22` | `0x33…33` |
+| state PDA | `A5tj58u7kXKYSNM1Yq2NvXULWkRmQ3SRMC5DaZuzCfKG` | `29HtgrSfYa4AYy6GtysvdxtfNq3THZ2LudouXMRbPQre` |
+| escrow PDA | `CDn2DHcvHjbepjSRcLEJe4DwEyPZo7qJDpAHdyN9bu4B` | `46B6NgxBC82XLXSyx6SFKtpEWuSPRswgKG5N1Tve1vXe` |
+| `next_leaf_index` after register | 1 | 1 |
+
+Instance B tx hashes: initialize `c1a3fe7b610501ecbe1df462e2ce4147e65e490ec8114b7e1ec1f5fa8be85d96`,
+fund-escrow `b4a23165dcdfd088bfbc16610ff3f7a3f877f94d3a2c9a02804b840065d898fe`,
+register `a282623b593a83ee9e3dad23d9c1d0bf72b0091aa9ba2aba5ff20e23c6239963`.
+After register, instance B's `tree_root` advanced
+`34fc00e4…2431d44` (empty) → `75bcc05d…337a6750`, and the escrow held 1000 with
+its `program_owner` still the registry (`5oj2gnD7…`) — the ADR-011
+credit-preserves-owner property, live.
+
+**Scope note (deliberate):** the on-chain surface is register + slash; posting
+and moderation are off-chain (Waku). The full lifecycle including *posting* is
+demoed on instance A, whose K=3 matches the one Groth16 membership circuit that
+has a trusted setup (`circuits/`, ADR-010). Instance B exercises the registry's
+parameterizability live (different K and N-of-M, register-with-stake); its
+off-chain K=2 post circuit is not demoed, as the testnet requirement is about
+instance *parameters*, not a second circuit. CU/cycle costs for register and
+slash are in `cu-costs.md`.
 
 ## Restarting the local chain
 

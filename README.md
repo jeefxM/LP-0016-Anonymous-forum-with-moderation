@@ -3,7 +3,9 @@
 Anonymous forum protocol with threshold moderation and membership revocation.
 A submission for [Network School LP-0016][bounty].
 
-> **Status:** Phase 0 (foundations). Not usable yet.
+> **Status:** Protocol, SDK, and reference app built; the membership registry
+> is deployed and exercised live on the LEZ testnet (two instances). See
+> [`docs/STATUS.md`](docs/STATUS.md) for the authoritative state.
 
 ## What this is
 
@@ -33,6 +35,28 @@ scripts/    Deployment + demo scripts
 
 Full architectural detail in [`docs/SPEC.md`](docs/SPEC.md).
 Phased build plan in [`docs/PLAN.md`](docs/PLAN.md).
+
+## Live on LEZ testnet
+
+Sequencer `https://testnet.lez.logos.co`. Membership registry (SPEL build,
+ADR-012) program ID:
+
+```
+4766fcc24cac757ab4c504b3844c354468f4d7fbb7b630957573513c6eb9a30d
+```
+
+Two forum instances run live under this program with **different K and N-of-M
+parameters** (each is a seed-derived `ForumState` PDA; `ForumConfig` carries the
+parameters):
+
+| | K | N-of-M | state PDA |
+|---|---|---|---|
+| Instance A | 3 | 2-of-5 | `A5tj58u7kXKYSNM1Yq2NvXULWkRmQ3SRMC5DaZuzCfKG` |
+| Instance B | 2 | 3-of-4 | `29HtgrSfYa4AYy6GtysvdxtfNq3THZ2LudouXMRbPQre` |
+
+Both ran `initialize → fund escrow → register-with-stake` live. Escrow PDAs, tx
+hashes, and the CU costs are in [`docs/deployments.md`](docs/deployments.md) and
+[`docs/cu-costs.md`](docs/cu-costs.md).
 
 ## Development
 
