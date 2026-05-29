@@ -58,6 +58,55 @@ Both ran `initialize → fund escrow → register-with-stake` live. Escrow PDAs,
 hashes, and the CU costs are in [`docs/deployments.md`](docs/deployments.md) and
 [`docs/cu-costs.md`](docs/cu-costs.md).
 
+## End-to-end usage
+
+The full lifecycle — create a forum instance → register → post anonymously →
+moderate (N-of-M) → accumulate strikes → slash → revoke — runs two ways.
+
+### Via the reference Basecamp app (no CLI, no manual tx)
+
+The app imports only `@logos-forum/moderation-sdk`. Backend bring-up (LEZ
+sequencer + nwaku + proof daemon), the SSH tunnel, and the required env vars are
+documented in [`app/README.md`](app/README.md). Once the backend is up:
+
+```sh
+pnpm install
+NEXT_PUBLIC_WAKU_PEER=/ip4/127.0.0.1/tcp/8000/ws/p2p/<peer-id> pnpm --filter app dev
+# open http://localhost:3000
+```
+
+Then click through the numbered panels:
+
+1. **Forum** — *Create demo forum* deploys a forum instance (2-of-3 moderation,
+   3-strike revocation) with three seeded moderator identities.
+2. **Identity** — *Create identity & join* generates a ZK identity and registers
+   the commitment on-chain, locking the stake.
+3. **Post anonymously** — write a post; a Groth16 membership proof is generated
+   in <10 s and published. Posts in the same epoch share a nullifier; the author
+   is otherwise unlinkable.
+4. **Feed & moderation** — a 2-of-3 moderator quorum *Strikes* a post (an N-of-M
+   certificate). After 3 strikes, *Slash* reconstructs the member's secret from
+   the certificates, submits the on-chain slash, and the member is revoked —
+   their subsequent posts are rejected.
+
+### Headless reference (SDK only)
+
+[`sdk/tests/lifecycle.mjs`](sdk/tests/lifecycle.mjs) drives the same
+register → post → 3× strike → slash → revoke flow through SDK imports against
+the daemon — the canonical end-to-end reference for library consumers.
+
+### On the public testnet
+
+The membership registry is live (program ID above) with the two instances. To
+create more instances or reproduce the live flow, see the command sequence and
+tx hashes in [`docs/deployments.md`](docs/deployments.md); bringing the local
+stack back up is documented there too.
+
+> **Note:** the `just demo` one-command wrapper is not yet wired (it currently
+> errors); use the app flow or `lifecycle.mjs` above for the end-to-end run.
+> Real-proof (`RISC0_DEV_MODE=0`) costs for register and slash are in
+> [`docs/cu-costs.md`](docs/cu-costs.md).
+
 ## Development
 
 ```bash
