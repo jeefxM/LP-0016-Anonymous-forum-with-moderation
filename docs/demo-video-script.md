@@ -28,6 +28,23 @@ Local checklist:
 
 ## Segment 1 — What and why (45s, talking head or a title slide)
 
+**Say this (read aloud):**
+
+> hey, so this is my submission for LP-0016, the anonymous forum with threshold
+> moderation and membership revocation. real quick what it is. its a forum where
+> you post completely anonymously, nobody can tell who you are and nobody can
+> link your posts together. but it can still be moderated. if enough moderators
+> agree you broke the rules, the system can actually unmask you, ban you, and
+> take your deposit. and the whole point is the crypto enforces that, theres no
+> admin who can just decide to unmask someone. i built two things here. a
+> moderation library thats forum-agnostic, so any app can plug it in, and a
+> reference app on top of it to show it working. and one thing i want to flag
+> early, almost nothing touches the blockchain. posting and moderation all
+> happen off-chain so theres no gas, the chain only gets hit when someone
+> registers and when someone finally gets banned.
+
+Stage directions / talking points:
+
 - This is LP-0016: an anonymous forum with threshold moderation and membership
   revocation.
 - Two deliverables: a forum-agnostic moderation SDK, and a reference Basecamp
@@ -39,6 +56,42 @@ Local checklist:
   slash are on-chain; posting and moderation are off-chain over Waku.
 
 ## Segment 2 — Architecture and key decisions (2 to 3 min, screen-share)
+
+**Say this (read aloud):**
+
+> ok so let me walk through how this actually works. theres basically three
+> layers, and the easiest way to picture it is like a private club. to join,
+> you put down a deposit and you whisper a secret, and the system writes a
+> scrambled version of your secret onto a big public list. your entry is on
+> there, but nobody can tell which one is yours. thats the on-chain part, the
+> membership registry, its a LEZ program and i built it with the SPEL framework
+> so it ships an IDL like the bounty wants.
+>
+> then when you post, you attach a zero-knowledge proof that basically says
+> "im one of the members on that list and im not banned," without pointing to
+> which entry is you. thats the ZK layer, its a Groth16 circuit and it runs in
+> under 10 seconds.
+>
+> the third layer is everything off-chain. the actual posts and the moderation
+> certificates go over Waku, which is the logos messaging stack. so its free
+> and anyone can audit it.
+>
+> now heres the clever part, the unmasking. every single post secretly carries
+> one torn piece of your identity, using shamir secret sharing. one piece is
+> useless, two pieces useless. moderation is N-of-M, so you need a quorum of
+> moderators to agree before they can issue a strike, no single moderator can
+> act alone. each strike grabs one of your pieces. once enough strikes pile up,
+> thats the K threshold, the pieces tape back together and reconstruct your
+> secret. then anyone can take that to the chain. it bans you, it keeps your
+> stake, and now that your secret is out, all your past posts become linkable
+> too. so the punishment basically is the unmasking, and it happens
+> automatically from the math, not because some admin decided.
+>
+> all the reasoning behind these choices is written up in the ADRs and the
+> protocol doc. the off-chain storage decision, the shamir threshold, the
+> N-of-M signatures, the staking escrow, its all in there.
+
+Stage directions / talking points:
 
 Show the repo layout and `docs/protocol.md`. Walk the three layers:
 
@@ -68,6 +121,27 @@ Mention the anonymity set is the full set of non-revoked members, and point at
 the threat model section in `docs/protocol.md`.
 
 ## Segment 3 — Tests and proof realness (1 to 2 min, terminal)
+
+**Say this (read aloud):**
+
+> first the tests. the bounty asks for a specific set of named tests and
+> theyre all here, let me run them. *(run `cargo test`)* so you can see
+> valid_registration, valid_post_proof, the two moderation cert ones,
+> strike_accumulation, slash_submission, and post_rejection_after_revocation,
+> all passing.
+>
+> now the proof part. the bounty wants real proofs with RISC0_DEV_MODE=0, not
+> dev-mode fakes, so let me run the bench. *(run the bench)* you can see right
+> at the top it prints RISC0_DEV_MODE equals 0, then it actually generates the
+> proof and verifies it. quick honest note here, this specific guest is the
+> original RISC0 post-proof. i later switched the live membership proof to
+> Groth16 to hit that under-10-seconds target, so this shot is showing that
+> real RISC0 proving works in the repo, and on the chain side RISC0_DEV_MODE=0
+> is what governs the register and slash programs. and heres the sequencer
+> itself, *(run the `ps` line)* you can see its also running with DEV_MODE=0,
+> so theres no dev-mode shortcut anywhere.
+
+Stage directions / talking points:
 
 Show the seven bounty-named tests pass:
 
@@ -114,6 +188,26 @@ bench above demonstrates, and the membership proof is Groth16 (sub-10s).
 
 ## Segment 4 — Full lifecycle, end to end (3 to 4 min, terminal — the centerpiece)
 
+**Say this (read aloud):**
+
+> alright this is the main event, the full lifecycle end to end. on the left
+> im tailing the sequencer log so you can watch the chain actually do work, and
+> on the right im gonna run the demo. *(run `just demo`)*
+>
+> ok so watch it go. first it creates a forum instance and registers a member,
+> and you can see the stake gets locked in. then it posts anonymously, the
+> membership proof gets generated and the post goes out. it posts three times
+> in the same window, and notice they share a nullifier but each one carries a
+> different shamir share, so an observer cant link them, but those identity
+> pieces are quietly being collected. then the moderators sign their N-of-M
+> certificates against those posts. then the slasher gathers the K
+> certificates, reconstructs the members secret out of the shares, and submits
+> one slash transaction, theres the tx hash. and the member is now revoked. and
+> because the secret is out, any future post from them gets rejected, which is
+> that last test. and there it is, FULL LIFECYCLE OK.
+
+Stage directions / talking points:
+
 In one pane, tail the sequencer so the audience sees it execute each chain tx:
 
 ```sh
@@ -143,6 +237,19 @@ End on `FULL LIFECYCLE OK`.
 
 ## Segment 5 — Live on the testnet (1 to 2 min, terminal)
 
+**Say this (read aloud):**
+
+> and this isnt just running on my machine, its live on the LEZ testnet. the
+> bounty wants two forum instances with different parameters, so heres my
+> deployments doc. one deployed program, and two instances under it. instance A
+> is K=3 with a 2-of-3 moderator quorum, instance B is K=2 with 3-of-4. let me
+> pull one straight off the testnet. *(run the `wallet account get`)* you can
+> see the state, the config with those exact parameters baked in, and
+> next_leaf_index showing a member already registered with stake. so thats two
+> live instances, different K and different N-of-M, on a verified program id.
+
+Stage directions / talking points:
+
 Show the two live instances, with different K and N-of-M, on one deployed
 program. Open `docs/deployments.md` to the table, then read one instance live:
 
@@ -161,6 +268,18 @@ Optional, for the "non-technical user" angle: switch to the Basecamp app at
 Feed & moderation) to show the same lifecycle without a CLI.
 
 ## Segment 6 — Wrap (30s)
+
+**Say this (read aloud):**
+
+> so thats the whole thing. quick recap, you get anonymous unlinkable posting,
+> N-of-M moderation, K-strike slashing that unmasks and bans, instances you can
+> parameterize however you want, a reusable forum-agnostic library, an app that
+> uses it without modifying it, an IDL through SPEL, and two live instances on
+> testnet. the repo is MIT, the whole flow is reproducible with just demo, and
+> the full protocol writeup and threat model are in the protocol doc. thanks
+> for watching.
+
+Stage directions / talking points:
 
 - Recap against the criteria: anonymous unlinkable posting, N-of-M moderation,
   K-strike slash with retroactive deanonymization, parameterizable instances,
